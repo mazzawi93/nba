@@ -9,7 +9,7 @@ def team_names():
     r = requests.get(url)
     soup = BeautifulSoup(r.content, "html.parser")
 
-    # Page also lists defunt franchises, only want currently active teams
+    # Page also lists defunct franchises, only want currently active teams
     active_teams = soup.find(id="teams_active")
 
     teams = []
@@ -27,6 +27,14 @@ def season_game_logs(team, year):
     if year > 2017 or year < 1950:
         raise ValueError('Year Value Incorrect')
 
+    # Renaming Teams in Recent years
+    if team == 'NJN' and year > 2012:
+        team = 'BRK'
+    elif team == 'CHA' and year > 2014:
+        team = 'CHO'
+    elif team == 'NOH' and year > 2013:
+        team = 'NOP'
+
     url = "http://www.basketball-reference.com/teams/%s/%s/gamelog" % (team, year)
 
     # The incorrect team won't return 404, but a page with no statistics
@@ -34,6 +42,8 @@ def season_game_logs(team, year):
     soup = BeautifulSoup(r.content, "html.parser")
 
     season_stats = soup.find(id='tgl_basic')
+
+    # TODO: Add rest days per team
     try:
         games = season_stats.find('tbody')
 
@@ -106,12 +116,62 @@ def season_game_logs(team, year):
                 result['home'] = team2
                 result['away'] = team1
 
-            print('result')
+            print(result)
     except AttributeError:
-        print("Doesn't exist")
+        print("%s doesn't exist" % (team))
 
 
-team_names = team_names()
+def team_season_stats(team):
+    url = 'http://www.basketball-reference.com/teams/%s/stats_per_game_totals.html' % team
 
-for team in team_names:
-    print(team)
+    r = requests.get(url)
+    soup = BeautifulSoup(r.content, "html.parser")
+
+    season_stats = soup.find(id='stats').find('tbody')
+
+    for year in season_stats.find_all('tr', {'class': None}):
+
+        season_year = year.find('th').text[0:4]
+        season_year = int(season_year) + 1
+        season = {
+            'year': season_year
+        }
+
+        # Loop through each stat
+        for stat in year.find_all('td'):
+            season[stat['data-stat']] = stat.string
+
+        del season['rank_team']
+        del season['foo']
+        del season['g']
+        del season['mp_per_g']
+
+        print(season)
+
+
+def get_starting_lineups(team, year):
+    """ Add team's starting lineup to game in Mongo database"""
+
+    url = "http://www.basketball-reference.com/teams/%s/%s_start.html" % (team, year)
+
+    r = requests.get(url)
+    r.raise_for_status()
+
+    soup = BeautifulSoup(r.content, "html.parser")
+
+    lineups = soup.find(id='starting_lineups').find('tbody')
+
+    # Iterate through each game to find the starting lineup
+    for game in lineups.find_all('tr', {'class': None}):
+
+        lineup = []
+
+        # TODO: Convert Date to the same format as games are stored (01-21-17)
+        date = game.find('td', {'data-stat': 'date_game'}).text
+
+        # Get the starting lineup
+        starters = game.find('td', {'data-stat': 'game_starters'})
+        for player in starters.find_all('a'):
+            lineup.append(player.text)
+
+    # TODO: Append this data to a game stored in the Mongo Database
