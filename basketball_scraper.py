@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup
 import requests
+import string
 
 
 def team_names():
@@ -174,4 +175,40 @@ def get_starting_lineups(team, year):
         for player in starters.find_all('a'):
             lineup.append(player.text)
 
-    # TODO: Append this data to a game stored in the Mongo Database
+            # TODO: Append this data to a game stored in the Mongo Database
+
+
+def get_active_players():
+    """ Get a list of all active NBA players (name and url to stats page) """
+
+    active_players = []
+
+    # Iterate through each letter of the alphabet
+    for letter in string.ascii_lowercase:
+        url = "http://www.basketball-reference.com/players/%s/" % letter
+        r = requests.get(url)
+        soup = BeautifulSoup(r.content, "html.parser")
+
+        # Not every letter is represented by a player
+        try:
+
+            # Player table
+            player_table = soup.find(id='players').find('tbody')
+
+            # Iterate through each player, active players have a <strong> tag
+            for player in player_table.find_all('tr'):
+
+                active = player.find('strong')
+
+                if active is not None:
+                    player_info = {
+                        'name': active.text,
+                        'url': active.find('a')['href']
+                    }
+
+                    active_players.append(player_info)
+
+        except Exception as e:
+            print(e)
+
+    return active_players
