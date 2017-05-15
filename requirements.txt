@@ -1,3 +1,7 @@
 requests
 pymongo
 BeautifulSoup4
+numpy
+scipy
+matplotlib
+pandas

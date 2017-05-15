@@ -1,6 +1,9 @@
+import re
 from bs4 import BeautifulSoup
 import requests
 import string
+from datetime import datetime
+from pymongo import MongoClient
 
 
 def team_names():
@@ -43,6 +46,10 @@ def season_game_logs(team, year):
     soup = BeautifulSoup(r.content, "html.parser")
 
     season_stats = soup.find(id='tgl_basic')
+
+    client = MongoClient()
+    db = client.basketball
+    collection = db.game_log
 
     # TODO: Add rest days per team
     try:
@@ -99,27 +106,46 @@ def season_game_logs(team, year):
                 'pf': match['opp_pf']
             }
 
-            result = {
-                'date': match['date_game']
-            }
+            result = {'date': datetime.strptime(match['date_game'], "%Y-%m-%d")}
 
             # Place the teams in the correct spot depending on who is the home team
             if match['game_location'] is None:
-                result['home_result'] = match['game_result']
+
+                # Store match result for classification
+                if match['game_result'] == 'W':
+                    result['home_result'] = 1
+                else:
+                    result['home_result'] = 0
+
                 result['home'] = team1
                 result['away'] = team2
             else:
-                if match['game_result'] == 'W':
-                    result['home_result'] = 'L'
-                else:
-                    result['home_result'] = 'W'
-
                 result['home'] = team2
                 result['away'] = team1
 
-            print(result)
+                # Store match result for classification
+                if match['game_result'] == 'W':
+                    result['home_result'] = 0
+                else:
+                    result['home_result'] = 1
+            if collection.find_one(result) is None:
+                collection.insert_one(result)
+
     except AttributeError:
-        print("%s doesn't exist" % (team))
+        print("%s doesn't exist" % team)
+
+    client.close()
+
+
+def store_team_data(years):
+    teams = team_names()
+
+    for team in teams:
+        print("Team: %s" % team)
+        team_season_stats(team)
+        for x in range(2018 - years, 2018):
+            print("Season: %s" % x)
+            season_game_logs(team, x)
 
 
 def team_season_stats(team):
@@ -127,6 +153,10 @@ def team_season_stats(team):
 
     r = requests.get(url)
     soup = BeautifulSoup(r.content, "html.parser")
+
+    client = MongoClient()
+    db = client.basketball
+    collection = db.team_season
 
     season_stats = soup.find(id='stats').find('tbody')
 
@@ -147,7 +177,10 @@ def team_season_stats(team):
         del season['g']
         del season['mp_per_g']
 
-        print(season)
+        if collection.find_one(season) is None:
+            collection.insert_one(season)
+
+    client.close()
 
 
 def get_starting_lineups(team, year):
@@ -176,6 +209,9 @@ def get_starting_lineups(team, year):
             lineup.append(player.text)
 
             # TODO: Append this data to a game stored in the Mongo Database
+
+        print(date)
+        print(lineup)
 
 
 def get_active_players():
@@ -212,3 +248,72 @@ def get_active_players():
             print(e)
 
     return active_players
+
+
+def get_player_stats(player):
+    """ Scrape a player's yearly stats"""
+
+    # TODO: Add a player's advanced stats, right now it is only per game
+
+    url = "http://www.basketball-reference.com" + player['url']
+
+    # Request
+    r = requests.get(url)
+    soup = BeautifulSoup(r.content, "html.parser")
+
+    # Player's statistics
+    per_game = soup.find(id="per_game").find('tbody')
+
+    # When there are missing years, there is no id or data-stat for the year
+    regex = re.compile('.*')
+
+    # Player dictionary
+    player_stats = {
+        '_id': url.rsplit('/', 1)[-1].rsplit('.', 1)[0],
+        'name': player['name']
+    }
+
+    # These entries are defined in the per game and advanced tables
+    # Only want them to be displayed once per season for a player
+    entries = ['age', 'team_id', 'lg_id', 'pos', 'g', 'gs', 'mp']
+
+    # Iterate through the years
+    for year in per_game.find_all('tr', {'id': regex}):
+
+        # Season stats
+        season = {}
+
+        season_year = year['id'][9:13]
+
+        # If a player is traded midway through the season, the year's totals for
+        # both teams is the first row.  Right now only the totals are stored
+        if season_year not in player_stats:
+            player_stats[season_year] = {}
+
+            # Each stat in a season (Per Game)
+            for stat in year.find_all('td', {'data-stat': regex}):
+                season[stat['data-stat']] = stat.string
+
+            for key in entries:
+                if key in season:
+                    player_stats[season_year][key] = season[key]
+                    del season[key]
+
+            player_stats[season_year]['per_g'] = season
+
+    return player_stats
+
+
+#players = get_active_players()
+
+#client = MongoClient()
+#db = client.basketball
+#collection = db.player
+
+#for player in players:
+#    print(player['name'])
+#    collection.insert_one(get_player_stats(player))
+
+#client.close()
+
+store_team_data(6)
