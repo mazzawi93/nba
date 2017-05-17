@@ -7,6 +7,12 @@ from pymongo import MongoClient
 
 
 def team_names():
+    """
+    Scrape all team names of the NBA
+    
+    :return: list of NBA Teams
+    """
+
     # Url for all teams in the NBA
     url = 'http://www.basketball-reference.com/teams/'
 
@@ -28,10 +34,24 @@ def team_names():
 
 
 def season_game_logs(team, year):
+    """
+    Scrape Basketball-Reference for every game log in a given team's season and store it in MongoDB.
+    
+    :param team: Team to scrape
+    :param year: Season in year
+    :raise ValueError: If year exceeds NBA season ranges
+    
+    """
+
     if year > 2017 or year < 1950:
         raise ValueError('Year Value Incorrect')
 
-    # Renaming Teams in Recent years
+    # MongoDB
+    client = MongoClient()
+    db = client.basketball
+    collection = db.game_log
+
+    # Renaming Teams in Recent years (Basketball-Reference has different urls for the same team in different years)
     if team == 'NJN' and year > 2012:
         team = 'BRK'
     elif team == 'CHA' and year > 2014:
@@ -47,23 +67,23 @@ def season_game_logs(team, year):
 
     season_stats = soup.find(id='tgl_basic')
 
-    client = MongoClient()
-    db = client.basketball
-    collection = db.game_log
-
-    # TODO: Add rest days per team
     try:
         games = season_stats.find('tbody')
 
         # Loop through every game in a team's season
         for game in games.find_all('tr', {'class': None}):
+
             match = {}
 
             # Loop through each stat
             for stat in game.find_all('td'):
                 match[stat['data-stat']] = stat.string
 
-            # Separate the two teams' stats
+            # Rename relocated teams
+            team = rename_team(team)
+            match['opp_id'] = rename_team(match['opp_id'])
+
+            # Separate the two teams' stats to keep them consistent for Mongo
             team1 = {
                 'team': team,
                 'pts': match['pts'],
@@ -106,28 +126,21 @@ def season_game_logs(team, year):
                 'pf': match['opp_pf']
             }
 
-            result = {'date': datetime.strptime(match['date_game'], "%Y-%m-%d")}
+            result = {'date': datetime.strptime(match['date_game'], "%Y-%m-%d"),
+                      'season': year}
 
             # Place the teams in the correct spot depending on who is the home team
             if match['game_location'] is None:
-
-                # Store match result for classification
-                if match['game_result'] == 'W':
-                    result['home_result'] = 1
-                else:
-                    result['home_result'] = 0
-
                 result['home'] = team1
                 result['away'] = team2
             else:
                 result['home'] = team2
                 result['away'] = team1
 
-                # Store match result for classification
-                if match['game_result'] == 'W':
-                    result['home_result'] = 0
-                else:
-                    result['home_result'] = 1
+            # Store match result
+            result['result'] = determine_home_win(match['game_location'], match['game_result'])
+
+            # Store result in MongoDB if the game doesn't already exist
             if collection.find_one(result) is None:
                 collection.insert_one(result)
 
@@ -171,6 +184,8 @@ def team_season_stats(team):
         # Loop through each stat
         for stat in year.find_all('td'):
             season[stat['data-stat']] = stat.string
+
+        season['team_id'] = rename_team(season['team_id'])
 
         del season['rank_team']
         del season['foo']
@@ -304,16 +319,55 @@ def get_player_stats(player):
     return player_stats
 
 
-#players = get_active_players()
+def determine_home_win(location, result):
+    """
+    Determine the result of the home team given the location and result for a a specific team
+    
+    :param location: Location of the game (None for Home, @ for Away)
+    :param result: Result of the game (W for Win, L for Loss)
+    :return: 1 or -1 for the home result
+    :raises Value Error: If result is not W or L, and if location is not None or @
+    
+    """
 
-#client = MongoClient()
-#db = client.basketball
-#collection = db.player
+    if result != 'W' and result != 'L':
+        raise ValueError('The game result is incorrect, must be W or L')
 
-#for player in players:
-#    print(player['name'])
-#    collection.insert_one(get_player_stats(player))
+    if location is not None and location != '@':
+        raise ValueError('Location is incorrectly entered')
 
-#client.close()
+    # Determine Home Winner
+    if location is None:
+        if result == 'W':
+            return 1
+        else:
+            return -1
+    else:
+        if result == 'L':
+            return 1
+        else:
+            return -1
+
+
+def rename_team(team):
+    """
+    Rename a team that has relocated to keep the database consistent
+    
+    :param team: Team Abbreviation to be named
+    :return: Changed team name if the team has relocated, otherwise the same name is returned
+         
+    """
+
+    # Rename relocated team to current abbreviation
+    if team == 'NJN':
+        team = 'BRK'
+    elif team == 'CHA':
+        team = 'CHO'
+    elif team == 'NOH':
+        team = 'NOP'
+
+    return team
+
 
 store_team_data(6)
+
