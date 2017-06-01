@@ -8,6 +8,8 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
+from sklearn import metrics
+from sklearn.ensemble import ExtraTreesClassifier
 
 
 def split_game_data(collection):
@@ -25,18 +27,31 @@ def split_game_data(collection):
     normalized = json_normalize(sanitized)
     df_test = pd.DataFrame(normalized)
 
-
+    items = ['_id.$oid', 'date.$date', 'home.team', 'away.team', 'away_season.avg_ht', 'home_season.avg_ht', 'home.score', 'away.score']
     # drop teams if in there
-    df_test.drop(['_id.$oid', 'date.$date', 'home.team', 'away.team'], axis=1, inplace=True)
-    df_train.drop(['_id.$oid', 'date.$date', 'home.team', 'away.team'], axis=1, inplace=True)
+    df_test.drop(items, axis=1, inplace=True)
+    df_train.drop(items, axis=1, inplace=True)
 
     df_train = df_train.dropna()
     df_test = df_test.dropna()
 
-    print(df_train)
-
     y_train = df_train.pop('result')
     y_test = df_test.pop('result')
+
+    model = ExtraTreesClassifier()
+    model.fit(df_train, y_train)
+
+    stats = list(df_train)
+
+    x = 0
+    to_drop = []
+    for feature in model.feature_importances_:
+        if feature < 0.009:
+            to_drop.append(stats[x])
+        x += 1
+
+    df_test.drop(to_drop, axis=1, inplace=True)
+    df_train.drop(to_drop, axis=1, inplace=True)
 
     data = {
         'train': {
@@ -75,11 +90,11 @@ def decision_tree(data):
     dtc.fit(data['train']['x'], data['train']['y'])
     print("%s - Decision Trees" % dtc.score(data['test']['x'], data['test']['y']))
 
+
 client = MongoClient()
 db = client.basketball
 collection_process = db.game_preprocess
 collection_game = db.game_log
-
 
 df = split_game_data(collection_process)
 naive_bayes(df)

@@ -36,11 +36,11 @@ def team_names():
 def season_game_logs(team, year):
     """
     Scrape Basketball-Reference for every game log in a given team's season and store it in MongoDB.
-    
+
     :param team: Team to scrape
     :param year: Season in year
     :raise ValueError: If year exceeds NBA season ranges
-    
+
     """
 
     if year > 2017 or year < 1950:
@@ -59,7 +59,7 @@ def season_game_logs(team, year):
     elif team == 'NOH' and year > 2013:
         team = 'NOP'
 
-    url = "http://www.basketball-reference.com/teams/%s/%s/gamelog" % (team, year)
+    url = 'http://www.basketball-reference.com/teams/%s/%s/gamelog' % (team, year)
 
     # The incorrect team won't return 404, but a page with no statistics
     r = requests.get(url)
@@ -74,6 +74,11 @@ def season_game_logs(team, year):
         for game in games.find_all('tr', {'class': None}):
 
             match = {}
+
+            # Find the URL for a game's play by play stat for the time for each stat
+            pbp = game.find('a')
+            pbp_url = 'http://www.basketball-reference.com/boxscores/pbp' + pbp['href'][-18:]
+            pbp_stats = stat_distribution(pbp_url)
 
             # Loop through each stat
             for stat in game.find_all('td'):
@@ -127,7 +132,9 @@ def season_game_logs(team, year):
             }
 
             result = {'date': datetime.strptime(match['date_game'], "%Y-%m-%d"),
-                      'season': year}
+                      'season': year,
+                      'home_time': pbp_stats['home'],
+                      'away_time': pbp_stats['away']}
 
             # Place the teams in the correct spot depending on who is the home team
             if match['game_location'] is None:
@@ -156,6 +163,8 @@ def store_team_data(years):
     for team in teams:
         print("Team: %s" % team)
         team_season_stats(team)
+
+    for team in teams:
         for x in range(2018 - years, 2018):
             print("Season: %s" % x)
             season_game_logs(team, x)
@@ -369,5 +378,118 @@ def rename_team(team):
     return team
 
 
-store_team_data(6)
+def stat_distribution(url):
+    # Request
+    r = requests.get(url)
+    soup = BeautifulSoup(r.content, "html.parser")
 
+    # Play by play table
+    table = soup.find(id='pbp').find_all('tr')
+
+    stat_dist = {
+        'home': [],
+        'away': [],
+    }
+
+    quarter = 0
+    for item in table:
+        time = None
+
+        x = 0
+
+        pattern = re.compile('^[0-9]{1,3}:[0-9]{2}\.[0-9]{1}$')
+
+        score = {}
+        for stat in item.find_all('td'):
+            x += 1
+
+            check = True
+
+            if "makes" in stat.text:
+                if 'assist' in stat.text:
+                    score['assist'] = 1
+
+                if '3-pt' in stat.text:
+                    score['points'] = 3
+                    score['fgm'] = 1
+                    score['fg3m'] = 1
+                    score['fga'] = 1
+                elif '2-pt' in stat.text:
+                    score['points'] = 2
+                    score['fgm'] = 1
+                    score['fga'] = 1
+                elif 'free' in stat.text:
+                    score['points'] = 1
+                    score['ftm'] = 1
+                    score['fta'] = 1
+            elif "misses" in stat.text:
+                if '3-pt' in stat.text:
+                    score['fga'] = 1
+                    score['fg3a'] = 1
+                elif '2-pt' in stat.text:
+                    score['fga'] = 1
+                elif 'free' in stat.text:
+                    score['fta'] = 1
+            elif "Defensive rebound" in stat.text:
+                if 'Team' not in stat.text:
+                    score['drb'] = 1
+            elif "Offensive rebound" in stat.text:
+                if 'Team' not in stat.text:
+                    score['orb'] = 1
+            elif "Turnover" in stat.text:
+                score['turnover'] = 1
+            elif "foul" in stat.text:
+                score['foul'] = 1
+            elif "timeout" in stat.text:
+                score['timeout'] = 1
+            elif "enters" in stat.text:
+                score['sub'] = 1
+            else:
+                check = False
+
+            if score:
+
+                if check is True:
+                    if x == 2:
+                        score['home'] = 0
+                    elif x == 6:
+                        score['home'] = 1
+
+            if pattern.match(stat.text):
+                if quarter == 2:
+                    date = datetime.strptime("12:00", "%M:%S")
+                elif quarter == 4:
+                    date = datetime.strptime("24:00", "%M:%S")
+                elif quarter == 6:
+                    date = datetime.strptime("36:00", "%M:%S")
+                elif quarter == 8:
+                    date = datetime.strptime("48:00", "%M:%S")
+                elif quarter == 10:
+                    date = datetime.strptime("53:00", "%M:%S")
+                elif quarter == 12:
+                    date = datetime.strptime("58:00", "%M:%S")
+                else:
+                    date = datetime.strptime("1:03:00", "%H:%M:%S")
+
+                time = datetime.strptime(stat.text[:-2], "%M:%S")
+                time = date - time
+                time = divmod(time.days * 86400 + time.seconds, 60)
+                time = time[0] + time[1] / 60
+
+        if score:
+            score['time'] = time
+
+            if score['home'] == 1:
+                del score['home']
+                stat_dist['home'].append(score)
+            else:
+                del score['home']
+                stat_dist['away'].append(score)
+
+        if time is None:
+            quarter += 1
+
+    return stat_dist
+
+
+store_team_data(6)

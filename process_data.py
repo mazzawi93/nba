@@ -158,7 +158,7 @@ search_criteria2 = {"$or": [{"home.team": "BOS"}, {"away.team": "BOS"}],
 
 search_criteria = {"$or": [{"home.team": "BOS"}, {"away.team": "BOS"}]}
 
-games = collection.find(search_criteria2).sort('date')
+games = collection.find()
 
 print(games.count())
 
@@ -168,11 +168,13 @@ for game in games:
 
     home = {'team': home_team,
             'last5': games_in_last_5(collection, home_team, game['date']),
-            'rest': rest_games(collection, home_team, game['date'], game['season'])}
+            'rest': rest_games(collection, home_team, game['date'], game['season']),
+            'score': game['home']['pts']}
 
     away = {'team': away_team,
             'last5': games_in_last_5(collection, away_team, game['date']),
-            'rest': rest_games(collection, away_team, game['date'], game['season'])}
+            'rest': rest_games(collection, away_team, game['date'], game['season']),
+            'score': game['away']['pts']}
 
     home.update(last_10(collection, home_team, game['date'], game['season']))
     away.update(last_10(collection, away_team, game['date'], game['season']))
@@ -187,6 +189,5 @@ for game in games:
         'date': game['date']
     }
 
-    print(process_game)
     if collection_process.find_one(process_game) is None:
         collection_process.insert_one(process_game)
