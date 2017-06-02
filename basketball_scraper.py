@@ -352,11 +352,17 @@ def stat_distribution(url):
 
         score = {}
         for stat in item.find_all('td'):
+
             x += 1
 
             check = True
 
             if "makes" in stat.text:
+
+                player = (stat.find('a')['href'])
+                player = player.rsplit('/', 1)[-1].rsplit('.', 1)[0]
+                score['player'] = player
+
                 if 'assist' in stat.text:
                     score['assist'] = 1
 
@@ -374,6 +380,11 @@ def stat_distribution(url):
                     score['ftm'] = 1
                     score['fta'] = 1
             elif "misses" in stat.text:
+
+                player = (stat.find('a')['href'])
+                player = player.rsplit('/', 1)[-1].rsplit('.', 1)[0]
+                score['player'] = player
+
                 if '3-pt' in stat.text:
                     score['fga'] = 1
                     score['fg3a'] = 1
@@ -443,3 +454,4 @@ def stat_distribution(url):
     return stat_dist
 
 # store_team_data(6)
+print(stat_distribution('http://www.basketball-reference.com/boxscores/pbp/201610280DAL.html'))
