@@ -73,6 +73,8 @@ def get_times(season=None, team=None, home=None, home_win=None):
         games = collection.find({'result': {'$in': result}, 'season': {'$in': season}, 'away.team': {'$in': team}},
                                 {'away_time': 1})
 
+    print('Processing Time Data')
+
     for game in games:
         for loc in locations:
             for stat in game[loc]:

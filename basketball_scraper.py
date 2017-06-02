@@ -4,6 +4,7 @@ import requests
 import string
 from datetime import datetime
 from pymongo import MongoClient
+import basketball_utils as butils
 
 
 def team_names():
@@ -85,8 +86,8 @@ def season_game_logs(team, year):
                 match[stat['data-stat']] = stat.string
 
             # Rename relocated teams
-            team = rename_team(team)
-            match['opp_id'] = rename_team(match['opp_id'])
+            team = butils.rename_team(team)
+            match['opp_id'] = butils.rename_team(match['opp_id'])
 
             # Separate the two teams' stats to keep them consistent for Mongo
             team1 = {
@@ -145,7 +146,7 @@ def season_game_logs(team, year):
                 result['away'] = team1
 
             # Store match result
-            result['result'] = determine_home_win(match['game_location'], match['game_result'])
+            result['result'] = butils.determine_home_win(match['game_location'], match['game_result'])
 
             # Store result in MongoDB if the game doesn't already exist
             if collection.find_one(result) is None:
@@ -194,7 +195,7 @@ def team_season_stats(team):
         for stat in year.find_all('td'):
             season[stat['data-stat']] = stat.string
 
-        season['team_id'] = rename_team(season['team_id'])
+        season['team_id'] = butils.rename_team(season['team_id'])
 
         del season['rank_team']
         del season['foo']
@@ -328,56 +329,6 @@ def get_player_stats(player):
     return player_stats
 
 
-def determine_home_win(location, result):
-    """
-    Determine the result of the home team given the location and result for a a specific team
-    
-    :param location: Location of the game (None for Home, @ for Away)
-    :param result: Result of the game (W for Win, L for Loss)
-    :return: 1 or -1 for the home result
-    :raises Value Error: If result is not W or L, and if location is not None or @
-    
-    """
-
-    if result != 'W' and result != 'L':
-        raise ValueError('The game result is incorrect, must be W or L')
-
-    if location is not None and location != '@':
-        raise ValueError('Location is incorrectly entered')
-
-    # Determine Home Winner
-    if location is None:
-        if result == 'W':
-            return 1
-        else:
-            return -1
-    else:
-        if result == 'L':
-            return 1
-        else:
-            return -1
-
-
-def rename_team(team):
-    """
-    Rename a team that has relocated to keep the database consistent
-    
-    :param team: Team Abbreviation to be named
-    :return: Changed team name if the team has relocated, otherwise the same name is returned
-         
-    """
-
-    # Rename relocated team to current abbreviation
-    if team == 'NJN':
-        team = 'BRK'
-    elif team == 'CHA':
-        team = 'CHO'
-    elif team == 'NOH':
-        team = 'NOP'
-
-    return team
-
-
 def stat_distribution(url):
     # Request
     r = requests.get(url)
@@ -491,5 +442,4 @@ def stat_distribution(url):
 
     return stat_dist
 
-
-store_team_data(6)
+# store_team_data(6)
