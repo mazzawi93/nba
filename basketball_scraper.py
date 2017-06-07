@@ -92,7 +92,7 @@ def season_game_logs(team, year):
             # Separate the two teams' stats to keep them consistent for Mongo
             team1 = {
                 'team': team,
-                'pts': match['pts'],
+                'pts': int(match['pts']),
                 'fg': match['fg'],
                 'fga': match['fga'],
                 'fg_pct': match['fg_pct'],
@@ -113,7 +113,7 @@ def season_game_logs(team, year):
 
             team2 = {
                 'team': match['opp_id'],
-                'pts': match['opp_pts'],
+                'pts': int(match['opp_pts']),
                 'fg': match['opp_fg'],
                 'fga': match['opp_fga'],
                 'fg_pct': match['opp_fg_pct'],
@@ -164,8 +164,6 @@ def store_team_data(years):
     for team in teams:
         print("Team: %s" % team)
         team_season_stats(team)
-
-    for team in teams:
         for x in range(2018 - years, 2018):
             print("Season: %s" % x)
             season_game_logs(team, x)
@@ -437,6 +435,7 @@ def stat_distribution(url):
                 time = date - time
                 time = divmod(time.days * 86400 + time.seconds, 60)
                 time = time[0] + time[1] / 60
+                time = round(time, 2)
 
         if score:
             score['time'] = time
@@ -452,6 +451,4 @@ def stat_distribution(url):
             quarter += 1
 
     return stat_dist
-
-# store_team_data(6)
-print(stat_distribution('http://www.basketball-reference.com/boxscores/pbp/201610280DAL.html'))
+store_team_data(6)
