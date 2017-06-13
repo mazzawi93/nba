@@ -1,10 +1,12 @@
 import re
+
 from bs4 import BeautifulSoup
 import requests
 import string
 from datetime import datetime
 from pymongo import MongoClient
 import basketball_utils as butils
+import string
 
 
 def team_names():
@@ -451,4 +453,53 @@ def stat_distribution(url):
             quarter += 1
 
     return stat_dist
-store_team_data(6)
+
+
+def create_test_set(t, g):
+    """
+    Create test set based on the number of teams and games played per team.
+    This test set will be used to validate the model because the first team
+    will be the strongest, second will be second strongest and so on.
+    :param t: The number of teams
+    :param g: The number of games played between a set of two teams (Must be even.)
+    :return: Dictionary containing test set with point data
+    """
+
+    # G must be even so that there is an equal number of home and away games
+    if g % 2 != 0:
+        raise ValueError('The number of games must be even so there is equal home and away')
+
+    data = []
+    teams = []
+
+    client = MongoClient()
+    db = client.basketball
+    collection = db.game_log
+
+    season = collection.find({'season': 2016})
+
+    # Give out team names in order so we always know the order of strength
+    for i in range(t):
+        teams.append(string.ascii_uppercase[i])
+
+    x = 0
+    for team in teams:
+        print('Team %s: ' % team)
+
+        # Iterate through the teams so that each team plays each other n times.
+        # The teams play each other the same amount at home and away
+        for i in range(t - 1, x, -1):
+            for j in range(g):
+                game = {}
+                if j % 2 == 0:
+                    game['Home'] = team
+                    game['Away'] = teams[i]
+                else:
+                    game['Home'] = teams[i]
+                    game['Away'] = team
+
+                print(game)
+                data.append(game)
+
+        x += 1
+    return data

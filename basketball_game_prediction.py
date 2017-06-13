@@ -1,15 +1,15 @@
-from pymongo import MongoClient
-from datetime import datetime
-import pandas as pd
 import json
+from datetime import datetime
+
+import pandas as pd
 from bson import json_util
 from pandas.io.json import json_normalize
+from pymongo import MongoClient
+from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
-from sklearn import metrics
-from sklearn.ensemble import ExtraTreesClassifier
 
 
 def split_game_data(collection):

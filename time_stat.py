@@ -267,3 +267,4 @@ def score_hist(season=None, team=None):
 
     plt.hist(home)
     plt.show()
+
