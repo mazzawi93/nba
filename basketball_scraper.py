@@ -474,6 +474,7 @@ def create_test_set(t, g):
 
     data = []
     teams = []
+    ids = []
 
     print("Creating Test Set...")
 
@@ -493,14 +494,14 @@ def create_test_set(t, g):
                     game['home'] = team
                     game['away'] = teams[i]
 
-                    match = ts.select_match(10)
+                    match = ts.select_match(10, ids)
 
 
                 else:
                     game['home'] = teams[i]
                     game['away'] = team
 
-                    match = ts.select_match(-10)
+                    match = ts.select_match(-10, ids)
 
                 point_times = []
 
@@ -528,6 +529,7 @@ def create_test_set(t, g):
                 game['away_pts'] = away_score
                 game['time'] = point_times
 
+                ids.append(match['_id'])
                 data.append(game)
 
         x += 1

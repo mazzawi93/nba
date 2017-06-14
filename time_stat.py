@@ -223,7 +223,7 @@ def match_point_times(season=None, team=None, home_win=None):
     return result
 
 
-def select_match(win_margin):
+def select_match(win_margin, ids):
     """
     Select a match from game logs with a winning margin.
     :param win_margin: Win margin of the game, negative means the away team won.
@@ -245,7 +245,8 @@ def select_match(win_margin):
               'away.pts': 1,
               'difference': {'$subtract': ['$home.pts', '$away.pts']}
               }},
-        {'$match': {'difference': {'$eq': win_margin}}},
+        {'$match': {'difference': {'$eq': win_margin},
+         '_id': {'$nin': ids}}},
         {'$limit': 1}
     ]
 
