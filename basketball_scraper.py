@@ -1,3 +1,4 @@
+import operator
 import re
 
 from bs4 import BeautifulSoup
@@ -7,7 +8,8 @@ from datetime import datetime
 from pymongo import MongoClient
 import basketball_utils as butils
 import string
-
+import time_stat as ts
+import pandas as pd
 
 def team_names():
     """
@@ -460,9 +462,10 @@ def create_test_set(t, g):
     Create test set based on the number of teams and games played per team.
     This test set will be used to validate the model because the first team
     will be the strongest, second will be second strongest and so on.
+
     :param t: The number of teams
     :param g: The number of games played between a set of two teams (Must be even.)
-    :return: Dictionary containing test set with point data
+    :return: Pandas Datafrane containing test data
     """
 
     # G must be even so that there is an equal number of home and away games
@@ -472,11 +475,7 @@ def create_test_set(t, g):
     data = []
     teams = []
 
-    client = MongoClient()
-    db = client.basketball
-    collection = db.game_log
-
-    season = collection.find({'season': 2016})
+    print("Creating Test Set...")
 
     # Give out team names in order so we always know the order of strength
     for i in range(t):
@@ -484,7 +483,6 @@ def create_test_set(t, g):
 
     x = 0
     for team in teams:
-        print('Team %s: ' % team)
 
         # Iterate through the teams so that each team plays each other n times.
         # The teams play each other the same amount at home and away
@@ -492,14 +490,45 @@ def create_test_set(t, g):
             for j in range(g):
                 game = {}
                 if j % 2 == 0:
-                    game['Home'] = team
-                    game['Away'] = teams[i]
-                else:
-                    game['Home'] = teams[i]
-                    game['Away'] = team
+                    game['home'] = team
+                    game['away'] = teams[i]
 
-                print(game)
+                    match = ts.select_match(10)
+
+
+                else:
+                    game['home'] = teams[i]
+                    game['away'] = team
+
+                    match = ts.select_match(-10)
+
+                point_times = []
+
+                home_score = 0
+                for stat in match['home_time']:
+                    if 'points' in stat:
+                        if stat['time'] <= 48:
+                            stat['time'] = round(stat['time'] / 48, 4)
+                            stat['home'] = 1
+                            home_score += stat['points']
+                            point_times.append(stat)
+
+                away_score = 0
+                for stat in match['away_time']:
+                    if 'points' in stat:
+                        if stat['time'] <= 48:
+                            stat['time'] = round(stat['time'] / 48, 4)
+                            stat['home'] = 0
+                            away_score += stat['points']
+                            point_times.append(stat)
+
+                point_times.sort(key=operator.itemgetter('time'))
+
+                game['home_pts'] = home_score
+                game['away_pts'] = away_score
+                game['time'] = point_times
+
                 data.append(game)
 
         x += 1
-    return data
+    return pd.DataFrame(data)
