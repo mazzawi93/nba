@@ -214,8 +214,6 @@ def match_point_times(season=None, team=None, home_win=None):
                  'away_pts': away_score,
                  'time': point_times}
 
-        print(match)
-
         matches.append(match)
 
     result = pd.DataFrame(matches)
@@ -235,6 +233,11 @@ def select_match(win_margin, ids):
     db = client.basketball
     collection = db.game_log
 
+    if win_margin < 0:
+        margin = '$lte'
+    else:
+        margin = '$gte'
+
     pipeline = [
         {'$project':
              {'home_time.points': 1,
@@ -245,7 +248,7 @@ def select_match(win_margin, ids):
               'away.pts': 1,
               'difference': {'$subtract': ['$home.pts', '$away.pts']}
               }},
-        {'$match': {'difference': {'$eq': win_margin},
+        {'$match': {'difference': {margin: win_margin},
          '_id': {'$nin': ids}}},
         {'$limit': 1}
     ]

@@ -10,6 +10,8 @@ import basketball_utils as butils
 import string
 import time_stat as ts
 import pandas as pd
+from random import shuffle
+
 
 def team_names():
     """
@@ -465,7 +467,7 @@ def create_test_set(t, g):
 
     :param t: The number of teams
     :param g: The number of games played between a set of two teams (Must be even.)
-    :return: Pandas Datafrane containing test data
+    :return: Pandas Dataframe containing data (Points per team (total and time stamps))
     """
 
     # G must be even so that there is an equal number of home and away games
@@ -494,14 +496,14 @@ def create_test_set(t, g):
                     game['home'] = team
                     game['away'] = teams[i]
 
-                    match = ts.select_match(10, ids)
+                    match = ts.select_match(8, ids)
 
 
                 else:
                     game['home'] = teams[i]
                     game['away'] = team
 
-                    match = ts.select_match(-10, ids)
+                    match = ts.select_match(-8, ids)
 
                 point_times = []
 
@@ -533,4 +535,6 @@ def create_test_set(t, g):
                 data.append(game)
 
         x += 1
+
+    shuffle(data)
     return pd.DataFrame(data)
