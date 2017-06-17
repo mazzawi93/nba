@@ -1,4 +1,3 @@
-import math
 import string
 
 import numpy as np
@@ -21,19 +20,35 @@ def attack_constraint(params, nteams):
     return sum(params[:nteams]) / nteams - 100
 
 
-def initial_guess(num):
+def initial_guess(num, model=None):
     """
     Create an initial guess for the minimization function
+    :param model:
     :param num: The number of teams
     :return: Numpy array of team abilities (Attack, Defense) and Home Advantage
     """
 
     att = np.full((1, num), 100)
-    dh = np.full((1, num + 1), 1)
+
+    if model == 0:
+        dh = np.full((1, num + 1), 1)
+    # The time parameters are added to the model
+    elif model == 1:
+        dh = np.full((1, num + 5), 1)
+    else:
+        dh = np.full((1, num + 1), 1)
+
     return np.append(att, dh)
 
 
 def dixon_coles(abilities, matches, teams):
+    """
+    This is the likelihood function for the Dixon Coles model.
+    :param abilities:
+    :param matches:
+    :param teams:
+    :return: Likelihood
+    """
     total = 0
 
     num = len(teams)
@@ -42,6 +57,7 @@ def dixon_coles(abilities, matches, teams):
         hteam, ateam = game[0], game[2]
         hpts, apts = game[1], game[3]
 
+        # Determine ability indexes
         hi, ai = 0, 0
         for i in [i for i, x in enumerate(teams) if x == hteam]:
             hi = i
@@ -49,22 +65,17 @@ def dixon_coles(abilities, matches, teams):
         for i in [i for i, x in enumerate(teams) if x == ateam]:
             ai = i
 
+        # Home and Away Poisson intensities
         hmean = abilities[num * 2] * abilities[hi] * abilities[ai + num]
         amean = abilities[hi + num] * abilities[ai]
 
+        # Log Likelihood
         total += poisson.logpmf(hpts, hmean) + poisson.logpmf(apts, amean)
 
     return -total
 
 
-def log(num):
-    try:
-        return math.log(num)
-    except ValueError:
-        return 0
-
-
-def goal_likelihood(abilities, matches, teams):
+def dixon_robinson(abilities, matches, teams, model):
     total = 0
 
     # Number of teams
@@ -72,9 +83,10 @@ def goal_likelihood(abilities, matches, teams):
 
     for game in matches:
 
-        home = game[0]
-        away = game[2]
+        # Team Names
+        home, away = game[0], game[2]
 
+        # Team Indexes for the ability array
         hi, ai = 0, 0
         for i in [i for i, x in enumerate(teams) if x == home]:
             hi = i
@@ -83,39 +95,47 @@ def goal_likelihood(abilities, matches, teams):
             ai = i
 
         like = 0
+        hp, ap = 0, 0
+
+        # Iterate through each point scored
         for point in game[4]:
 
-            if point['home'] == 1:
+            if model > 1:
+                time_stamp = float(point['time'])
 
+                if (11 / 48) < time_stamp <= (12 / 48):
+                    time = abilities[num * 2 + 1]
+                elif (23 / 48) < time_stamp <= (24 / 48):
+                    time = abilities[num * 2 + 2]
+                elif (35 / 48) < time_stamp <= (36 / 48):
+                    time = abilities[num * 2 + 3]
+                elif (47 / 48) < time_stamp <= (48 / 48):
+                    time = abilities[num * 2 + 4]
+                else:
+                    time = 1
+
+            if point['home'] == 0:
+                hp += int(point['points'])
                 mean = abilities[hi] * abilities[ai + num] * abilities[num * 2]
 
+                like += poisson.logpmf(hp, mean)
             else:
+                ap += int(point['points'])
                 mean = abilities[hi + num] * abilities[ai]
 
-            like += log(mean)
+                like += poisson.logpmf(ap, mean)
 
-        total += like
+            if model > 1:
+                like += time
+        total += like - poisson.logpmf(hp, (abilities[hi] * abilities[ai + num] * abilities[num * 2])) - poisson.logpmf(
+            ap, (abilities[hi + num] * abilities[ai]))
 
     return -total
 
 
-def write_stats(stat, file, num):
-    g = open(file, 'w')
-    g.write('%s\t%s\t%s\n' % ('Team', 'Attack', 'Defense'))
-
-    for i in range(0, num):
-        att = format(float(stat[i]), '.2f')
-        defense = format(float(stat[i + num]), '.2f')
-
-        g.write('%s\t%s\n' % (att, defense))
-
-    g.write('Home Advantage\t%s' % stat[num * 2])
-    g.close()
-
-
-def dixon_coles_test_set(data, num):
+def test_set_dixon(data, num, coles, model=None):
     # Initial Guess
-    abilities = initial_guess(num)
+    abilities = initial_guess(num, model)
 
     # Team Names
     teams = []
@@ -125,22 +145,12 @@ def dixon_coles_test_set(data, num):
     # Likelihood constraint
     con = {'type': 'eq', 'fun': attack_constraint, 'args': (num,)}
 
-    opt = minimize(dixon_coles, x0=abilities, args=(data, teams), constraints=con)
+    if coles is True:
+        opt = minimize(dixon_coles, x0=abilities, args=(data, teams), constraints=con)
+    else:
+        opt = minimize(dixon_robinson, x0=abilities, args=(data, teams, model), constraints=con)
 
     return opt
-
-
-def print_abilities(ab):
-    num = int((len(ab) - 1) / 2)
-
-    att = ab[:num]
-    defend = ab[num:num * 2]
-    home = ab[len(ab) - 1]
-
-    for x in range(0, num):
-        print('%s\t%s' % (att[x], defend[x]))
-
-    print('Home Advantage: %s' % home)
 
 
 def nba_dixon_coles(season):
@@ -172,3 +182,22 @@ def nba_dixon_coles(season):
     opt = minimize(dixon_coles, x0=ab, args=(nba, teams), constraints=con)
 
     return opt
+
+
+def print_abilities(ab, teams=None):
+    num = int((len(ab) - 1) / 2)
+
+    att = ab[:num]
+    defend = ab[num:num * 2]
+    home = ab[len(ab) - 1]
+
+    if teams is None:
+        teams = []
+        for i in range(num):
+            teams.append(string.ascii_uppercase[i])
+
+    print("\tAttack\tDefense")
+    for x in range(0, num):
+        print('%s:\t%s\t%s' % (teams[x], format(float(att[x]), '.2f'), format(float(defend[x]), '.2f')))
+
+    print('Home Advantage: %s' % format(float(home), '.2f'))
