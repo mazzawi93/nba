@@ -1,31 +1,93 @@
-from db import test_set
+import string
+
+import numpy as np
+from scipy.optimize import minimize
+
+from db import datasets
+from db import process_utils
+from models import dixon_robinson as dr
 
 
 class Basketball:
-    def __init__(self, nba, nteams=None, ngames=None):
+    def __init__(self, nba, nteams=4, ngames=4, nmargin=10, season=None):
 
-        self.data = None
+        if season is None:
+            season = [2016]
 
         if nba is True:
 
-            self.nba_data(nteams, ngames)
+            self.dataset = datasets.match_point_times(season)
+            self.teams = process_utils.name_teams(True)
+            self.nteams = 30
+
         else:
-            # Checking the number of teams
-            if nteams is None:
-                raise TypeError('Number of teams must be defined.')
-            elif nteams < 2:
+
+            if nteams < 2:
                 raise ValueError('There must be at least two teams.')
 
-            # Check the number of games played between both teams
-            if ngames is None:
-                raise TypeError('Number of games must be defined.')
-            elif ngames % 2 != 0:
+            if ngames % 2 != 0:
                 raise ValueError('The number of games must be even so there is equal home and away.')
 
-            self.test_data()
+            self.dataset = datasets.create_test_set(nteams, ngames, nmargin)
+            self.teams = process_utils.name_teams(False, nteams)
+            self.nteams = nteams
 
-    def nba_data(self, nteams, ngames):
-        self.data = 2
+    def initial_guess(self, model=0):
+        """
+        Create an initial guess for the minimization function
+        :param model:
+        :param num: The number of teams
+        :return: Numpy array of team abilities (Attack, Defense) and Home Advantage
+        """
 
-    def test_data(self):
-        self.data = 3
+        att = np.full((1, self.nteams), 100)
+
+        if model == 0:
+            dh = np.full((1, self.nteams + 1), 1)
+        # The time parameters are added to the model
+        elif model == 1:
+            dh = np.full((1, self.nteams + 5), 1)
+        else:
+            dh = np.full((1, self.nteams + 1), 1)
+
+        return np.append(att, dh)
+
+    def dixon_coles(self):
+        """
+        Apply the dixon coles model to an NBA season to find the attack and defense parameters for each team
+        as well as the home court advantage
+        :param season: NBA Season
+        :return:
+        """
+
+        # Initial Guess for the minimization
+        ab = self.initial_guess()
+
+        # Game Data without time
+        nba = self.dataset
+        nba = nba.drop('time', axis=1)
+        nba = nba.as_matrix()
+
+        # Minimize Constraint
+        con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (self.nteams,)}
+
+        # Minimize the likelihood function
+        opt = minimize(dr.dixon_coles, x0=ab, args=(nba, self.teams), constraints=con)
+
+        return opt
+
+    def dixon_robinson(self, model=0):
+
+        # Initial Guess for the minimization
+        ab = self.initial_guess(model)
+
+        # Minimize Constraint
+        con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (self.nteams,)}
+
+        # Minimize the likelihood function
+        opt = minimize(dr.dixon_robinson, x0=ab, args=(self.dataset.as_matrix(), self.teams, model), constraints=con)
+
+        return opt
+
+
+

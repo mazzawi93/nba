@@ -1,10 +1,4 @@
-import string
-
-import numpy as np
-from scipy.optimize import minimize
 from scipy.stats import poisson
-
-import db.time_stat as ts
 
 
 def attack_constraint(params, nteams):
@@ -18,27 +12,6 @@ def attack_constraint(params, nteams):
     """
 
     return sum(params[:nteams]) / nteams - 100
-
-
-def initial_guess(num, model=None):
-    """
-    Create an initial guess for the minimization function
-    :param model:
-    :param num: The number of teams
-    :return: Numpy array of team abilities (Attack, Defense) and Home Advantage
-    """
-
-    att = np.full((1, num), 100)
-
-    if model == 0:
-        dh = np.full((1, num + 1), 1)
-    # The time parameters are added to the model
-    elif model == 1:
-        dh = np.full((1, num + 5), 1)
-    else:
-        dh = np.full((1, num + 1), 1)
-
-    return np.append(att, dh)
 
 
 def dixon_coles(abilities, matches, teams):
@@ -131,73 +104,3 @@ def dixon_robinson(abilities, matches, teams, model):
             ap, (abilities[hi + num] * abilities[ai]))
 
     return -total
-
-
-def test_set_dixon(data, num, coles, model=None):
-    # Initial Guess
-    abilities = initial_guess(num, model)
-
-    # Team Names
-    teams = []
-    for i in range(num):
-        teams.append(string.ascii_uppercase[i])
-
-    # Likelihood constraint
-    con = {'type': 'eq', 'fun': attack_constraint, 'args': (num,)}
-
-    if coles is True:
-        opt = minimize(dixon_coles, x0=abilities, args=(data, teams), constraints=con)
-    else:
-        opt = minimize(dixon_robinson, x0=abilities, args=(data, teams, model), constraints=con)
-
-    return opt
-
-
-def nba_dixon_coles(season):
-    """
-    Apply the dixon coles model to an NBA season to find the attack and defense parameters for each team
-    as well as the home court advantage
-    :param season: NBA Season
-    :return:
-    """
-
-    # NBA Teams
-    teams = ['ATL', 'BOS', 'BRK', 'CHO', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GSW', 'HOU', 'IND', 'LAC', 'LAL', 'MEM',
-             'MIA', 'MIL', 'MIN', 'NOP', 'NYK', 'OKC', 'ORL', 'PHI', 'PHO', 'POR', 'SAC', 'SAS', 'TOR', 'UTA', 'WAS']
-
-    # Initial Guess for the minimization
-    att = np.full((1, len(teams)), 10)
-    dh = np.full((1, len(teams) + 1), 1)
-    ab = np.append(att, dh)
-
-    # NBA Season Data
-    nba = ts.match_point_times([season])
-    nba = nba.drop('time', axis=1)
-    nba = nba.as_matrix()
-
-    # Minimize Constraint
-    con = {'type': 'eq', 'fun': attack_constraint, 'args': (len(teams),)}
-
-    # Minimize the likelihood function
-    opt = minimize(dixon_coles, x0=ab, args=(nba, teams), constraints=con)
-
-    return opt
-
-
-def print_abilities(ab, teams=None):
-    num = int((len(ab) - 1) / 2)
-
-    att = ab[:num]
-    defend = ab[num:num * 2]
-    home = ab[len(ab) - 1]
-
-    if teams is None:
-        teams = []
-        for i in range(num):
-            teams.append(string.ascii_uppercase[i])
-
-    print("\tAttack\tDefense")
-    for x in range(0, num):
-        print('%s:\t%s\t%s' % (teams[x], format(float(att[x]), '.2f'), format(float(defend[x]), '.2f')))
-
-    print('Home Advantage: %s' % format(float(home), '.2f'))
