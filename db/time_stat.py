@@ -221,40 +221,4 @@ def match_point_times(season=None, team=None, home_win=None):
     return result
 
 
-def select_match(win_margin, ids):
-    """
-    Select a match from game logs with a winning margin.
-    :param win_margin: Win margin of the game, negative means the away team won.
-    :return: The game selected from MongoDB
-    """
 
-    # MongoDB
-    client = MongoClient()
-    db = client.basketball
-    collection = db.game_log
-
-    if win_margin < 0:
-        margin = '$lte'
-    else:
-        margin = '$gte'
-
-    pipeline = [
-        {'$project':
-             {'home_time.points': 1,
-              'away_time.points': 1,
-              'home_time.time': 1,
-              'away_time.time': 1,
-              'home.pts': 1,
-              'away.pts': 1,
-              'difference': {'$subtract': ['$home.pts', '$away.pts']}
-              }},
-        {'$match': {'difference': {margin: win_margin},
-         '_id': {'$nin': ids}}},
-        {'$limit': 1}
-    ]
-
-    game = collection.aggregate(pipeline)
-
-    # The limit is 1, so just return the first object
-    for i in game:
-        return i

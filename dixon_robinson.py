@@ -4,7 +4,7 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.stats import poisson
 
-import time_stat as ts
+import db.time_stat as ts
 
 
 def attack_constraint(params, nteams):
