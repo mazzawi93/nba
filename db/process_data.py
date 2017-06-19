@@ -1,5 +1,135 @@
-from datetime import timedelta, datetime
+from datetime import timedelta
 from pymongo import MongoClient
+from db import process_utils
+import pandas as pd
+
+
+def select_match(win_margin, ids):
+    """
+    Select a match from game logs with a given winning margin
+    :param ids: List of game ids to exclude
+    :param win_margin: Win margin of the game, negative means the away team won.
+    :return: The game selected from MongoDB
+    """
+
+    # Connect to MongoDB
+    client = MongoClient()
+    db = client.basketball
+    collection = db.game_log
+
+    # Negative win margin means the away team won
+    if win_margin < 0:
+        margin = '$lte'
+    else:
+        margin = '$gte'
+
+    # MongoDB Aggregation
+    pipeline = [
+        {'$project':
+            {
+                'home_time.points': 1,
+                'away_time.points': 1,
+                'home_time.time': 1,
+                'away_time.time': 1,
+                'home.pts': 1,
+                'away.pts': 1,
+                'difference': {'$subtract': ['$home.pts', '$away.pts']}
+            }},
+        {'$match':
+            {
+                'difference': {margin: win_margin},
+                '_id': {'$nin': ids}
+            }},
+        {'$limit': 1}
+    ]
+
+    game = collection.aggregate(pipeline)
+
+    # The limit is 1, so just return the first object
+    for i in game:
+        return i
+
+
+def point_time_dist(season=None, team=None, home=None, home_win=None):
+    """
+
+    :param season: List of seasons
+    :param team: List of teams
+    :param home: Boolean for home or away (None for both)
+    :param home_win: Boolean for Home or Away Win (None to include both)
+    :return: Point Distribution by the minute
+    """
+    time_data = {}
+
+    # Check season values
+    season = process_utils.season_check(season)
+
+    # Check team values
+    team = process_utils.team_check(team)
+
+    # Check Home Value
+    if not isinstance(home, bool):
+        if home is not None:
+            raise TypeError("Home must be a Boolean value or None")
+
+    # Check Home Win Value
+    if not isinstance(home_win, bool):
+        if home_win is not None:
+            raise TypeError("Home Win must be a Boolean value or None")
+
+    if home_win is None:
+        result = [1, -1]
+    elif home_win is True:
+        result = [1]
+    else:
+        result = [-1]
+
+    # MongoDB
+    client = MongoClient()
+    db = client.basketball
+    collection = db.game_log
+
+    if home is None:
+        locations = ['home_time', 'away_time']
+        games = collection.find(
+            {'result': {'$in': result}, 'season': {'$in': season},
+             '$or': [{'home.team': {'$in': team}}, {'away.team': {'$in': team}}]},
+            {'home_time': 1, 'away_time': 1})
+    elif home is True:
+        locations = ['home_time']
+        games = collection.find({'result': {'$in': result}, 'season': {'$in': season}, 'home.team': {'$in': team}},
+                                {'home_time': 1})
+    else:
+        locations = ['away_time']
+        games = collection.find({'result': {'$in': result}, 'season': {'$in': season}, 'away.team': {'$in': team}},
+                                {'away_time': 1})
+
+    print('Processing Time Data')
+
+    for game in games:
+        for loc in locations:
+            for stat in game[loc]:
+
+                time = int(stat['time']) + 1
+
+                # Only want regulation time
+                if time <= 48:
+                    for key in ['points']:
+                        if key in stat:
+
+                            if time not in time_data:
+                                time_data[time] = {}
+
+                            if key not in time_data[time]:
+                                time_data[time][key] = stat[key]
+
+                            else:
+                                time_data[time][key] = time_data[time][key] + stat[key]
+
+    data = pd.DataFrame(time_data)
+    data = data.transpose()
+
+    return data
 
 
 def games_in_last_5(col, team, date):
@@ -130,64 +260,3 @@ def recent_meetings(col, home_team, away_team, date, season):
             score -= result
 
     return score
-
-
-def season_stats(col, team, season):
-    stats = {}
-    entries = ['year', 'team_id', 'lg_id', '_id']
-    for year in col.find({'year': season, 'team_id': team}):
-        stats = year
-
-    for entry in entries:
-        if entry in stats:
-            del stats[entry]
-
-    return stats
-
-
-client = MongoClient()
-db = client.basketball
-collection = db.game_log
-collection_team = db.team_season
-collection_process = db.game_preprocess
-
-train_date = datetime(2013, 11, 29)
-
-search_criteria2 = {"$or": [{"home.team": "BOS"}, {"away.team": "BOS"}],
-                    "date": train_date}
-
-search_criteria = {"$or": [{"home.team": "BOS"}, {"away.team": "BOS"}]}
-
-games = collection.find()
-
-print(games.count())
-
-for game in games:
-    home_team = game['home']['team']
-    away_team = game['away']['team']
-
-    home = {'team': home_team,
-            'last5': games_in_last_5(collection, home_team, game['date']),
-            'rest': rest_games(collection, home_team, game['date'], game['season']),
-            'score': game['home']['pts']}
-
-    away = {'team': away_team,
-            'last5': games_in_last_5(collection, away_team, game['date']),
-            'rest': rest_games(collection, away_team, game['date'], game['season']),
-            'score': game['away']['pts']}
-
-    home.update(last_10(collection, home_team, game['date'], game['season']))
-    away.update(last_10(collection, away_team, game['date'], game['season']))
-
-    process_game = {
-        'home': home,
-        'home_season': season_stats(collection_team, home_team, game['season']),
-        'away_season': season_stats(collection_team, away_team, game['season']),
-        'away': away,
-        'recent': recent_meetings(collection, home_team, away_team, game['date'], game['season']),
-        'result': game['result'],
-        'date': game['date']
-    }
-
-    if collection_process.find_one(process_game) is None:
-        collection_process.insert_one(process_game)

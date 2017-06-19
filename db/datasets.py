@@ -4,7 +4,7 @@ from random import shuffle
 import pandas as pd
 from pymongo import MongoClient
 
-from db import game_log
+from db import process_data
 from db import process_utils
 
 
@@ -147,11 +147,11 @@ def create_test_set(t, g, margin):
                 if j % 2 == 0:
                     game['home'] = team
                     game['away'] = teams[i]
-                    match = game_log.select_match(margin, ids)
+                    match = process_data.select_match(margin, ids)
                 else:
                     game['home'] = teams[i]
                     game['away'] = team
-                    match = game_log.select_match(-margin, ids)
+                    match = process_data.select_match(-margin, ids)
 
                 # Iterate through point times
                 point_times = []
@@ -190,16 +190,3 @@ def create_test_set(t, g, margin):
 
     shuffle(data)
     return pd.DataFrame(data)
-
-
-def process_time(times_list, stat, home):
-    # Don't do overtime for now
-    if stat['time'] <= 48:
-        stat['time'] = round(stat['time'] / 48, 4)
-
-        if home is True:
-            stat['home'] = 1
-        else:
-            stat['home'] = 0
-
-        times_list.append(stat)
