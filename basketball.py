@@ -1,7 +1,6 @@
-import string
-
 import numpy as np
 from scipy.optimize import minimize
+from scipy.stats import poisson
 
 from db import datasets
 from db import process_utils
@@ -15,6 +14,8 @@ class Basketball:
             season = [2016]
 
         self.opt = None
+        self.nba = nba
+        self.abilities = None
 
         if nba is True:
 
@@ -33,6 +34,8 @@ class Basketball:
             self.dataset = datasets.create_test_set(nteams, ngames, nmargin)
             self.teams = process_utils.name_teams(False, nteams)
             self.nteams = nteams
+            self.ngames = ngames
+            self.nmargin = nmargin
 
     def initial_guess(self, model=0):
         """
@@ -75,7 +78,13 @@ class Basketball:
         # Minimize the likelihood function
         self.opt = minimize(dr.dixon_coles, x0=ab, args=(nba, self.teams), constraints=con)
 
+        self.ab(self.opt.x)
+
     def dixon_robinson(self, model=0):
+        """
+        Dixon-Robinson implementation
+        :param model: The model number (0 = no time or scoreline parameters)
+        """
 
         # Initial Guess for the minimization
         ab = self.initial_guess(model)
@@ -84,28 +93,66 @@ class Basketball:
         con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (self.nteams,)}
 
         # Minimize the likelihood function
-        self.opt = minimize(dr.dixon_robinson, x0=ab, args=(self.dataset.as_matrix(), self.teams, model), constraints=con)
+        self.opt = minimize(dr.dixon_robinson, x0=ab, args=(self.dataset.as_matrix(), self.teams, model),
+                            constraints=con)
 
-    def print_abilities(self):
-        """
-        Print the team parameters (attack, defense and home) in a neat format
-        """
+        self.ab(self.opt.x)
 
-        if self.opt is not None:
+    def ab(self, opt):
 
-            print('Team\tAttack\tDefence')
+        self.abilities = {}
 
-            i = 0
-            for team in self.teams:
-                print('%s\t\t%.2f\t%.2f' % (team, self.opt.x[i], self.opt.x[i+self.nteams]))
-                i += 1
+        i = 0
+        for team in self.teams:
+            self.abilities[team] = {
+                'att': opt[i],
+                'def': opt[i + self.nteams]
+            }
+            i += 1
 
-            print("Home Advantage:\t%.2f" % self.opt.x[self.nteams*2])
+        self.abilities['home'] = opt[self.nteams * 2]
 
+    def test_model(self, season = None):
 
+        if self.nba is True:
+            if season is None:
+                season = [2017]
 
+            test = datasets.match_point_times(season)
+        else:
+            test = datasets.create_test_set(self.nteams, self.ngames, self.nmargin)
 
+        predict = 0
+        ngames = 0
+        for row in test.itertuples():
+            hmean = self.abilities[row.home]['att'] * self.abilities[row.away]['def'] * self.abilities['home']
+            amean = self.abilities[row.away]['att'] * self.abilities[row.home]['def']
 
+            hpts = poisson.rvs(mu=hmean, size=1000)
+            apts = poisson.rvs(mu=amean, size=1000)
 
+            hwin, awin = 0, 0
 
+            for i in range(1000):
+                if hpts[i] >= apts[i]:
+                    hwin += 1
+                else:
+                    awin += 1
 
+            if hwin >= awin:
+                predicted = row.home
+            else:
+                predicted = row.away
+
+            if row.home_pts > row.away_pts:
+                winner = row.home
+            else:
+                winner = row.away
+
+            if predicted == winner:
+                predict += 1
+            ngames += 1
+
+            print("%s: %.4f\t\t%s: %.4f\t\tWinner: %s" % (row.home, hwin/1000, row.away, awin/1000, winner))
+
+        print("Prediction Accuracy: %.4f" % (predict/ngames))
