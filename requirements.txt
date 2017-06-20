@@ -1,4 +1,3 @@
-sklearn
 requests
 pymongo
 BeautifulSoup4

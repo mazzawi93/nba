@@ -14,6 +14,8 @@ class Basketball:
         if season is None:
             season = [2016]
 
+        self.opt = None
+
         if nba is True:
 
             self.dataset = datasets.match_point_times(season)
@@ -36,7 +38,6 @@ class Basketball:
         """
         Create an initial guess for the minimization function
         :param model:
-        :param num: The number of teams
         :return: Numpy array of team abilities (Attack, Defense) and Home Advantage
         """
 
@@ -72,9 +73,7 @@ class Basketball:
         con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (self.nteams,)}
 
         # Minimize the likelihood function
-        opt = minimize(dr.dixon_coles, x0=ab, args=(nba, self.teams), constraints=con)
-
-        return opt
+        self.opt = minimize(dr.dixon_coles, x0=ab, args=(nba, self.teams), constraints=con)
 
     def dixon_robinson(self, model=0):
 
@@ -85,9 +84,28 @@ class Basketball:
         con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (self.nteams,)}
 
         # Minimize the likelihood function
-        opt = minimize(dr.dixon_robinson, x0=ab, args=(self.dataset.as_matrix(), self.teams, model), constraints=con)
+        self.opt = minimize(dr.dixon_robinson, x0=ab, args=(self.dataset.as_matrix(), self.teams, model), constraints=con)
 
-        return opt
+    def print_abilities(self):
+        """
+        Print the team parameters (attack, defense and home) in a neat format
+        """
+
+        if self.opt is not None:
+
+            print('Team\tAttack\tDefence')
+
+            i = 0
+            for team in self.teams:
+                print('%s\t\t%.2f\t%.2f' % (team, self.opt.x[i], self.opt.x[i+self.nteams]))
+                i += 1
+
+            print("Home Advantage:\t%.2f" % self.opt.x[self.nteams*2])
+
+
+
+
+
 
 
 
