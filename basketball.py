@@ -37,31 +37,36 @@ class Basketball:
             self.ngames = ngames
             self.nmargin = nmargin
 
-    def initial_guess(self, model=0):
+    def initial_guess(self, model=1):
         """
         Create an initial guess for the minimization function
-        :param model:
-        :return: Numpy array of team abilities (Attack, Defense) and Home Advantage
+        :param model: The model implemented (1 = Base model (Att, Def, Home), 2 = Time Parameters, 3 = winning/losing)
+        :return: Numpy array of team abilities (Attack, Defense) and Home Advantage and other factors
         """
 
+        # Attack and Defence parameters
         att = np.full((1, self.nteams), 100)
+        d = np.full((1, self.nteams), 1)
+        team = np.append(att, d)
 
-        if model == 0:
-            dh = np.full((1, self.nteams + 1), 1)
+        # Base model only contains the home advantage
+        if model == 1:
+            params = np.array([1])
         # The time parameters are added to the model
-        elif model == 1:
-            dh = np.full((1, self.nteams + 5), 1)
+        elif model == 2:
+            params = np.full((1, 5), 1.5)
+        # Model is extended by adding scoreline parameters if a team is winning
+        elif model == 3:
+            params = np.full((1, 7), 1.5)
         else:
-            dh = np.full((1, self.nteams + 1), 1)
+            params = np.full((1, self.nteams + 1), 1)
 
-        return np.append(att, dh)
+        return np.append(team, params)
 
     def dixon_coles(self):
         """
         Apply the dixon coles model to an NBA season to find the attack and defense parameters for each team
         as well as the home court advantage
-        :param season: NBA Season
-        :return:
         """
 
         # Initial Guess for the minimization
@@ -70,7 +75,6 @@ class Basketball:
         # Game Data without time
         nba = self.dataset
         nba = nba.drop('time', axis=1)
-        nba = nba.as_matrix()
 
         # Minimize Constraint
         con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (self.nteams,)}
@@ -80,7 +84,7 @@ class Basketball:
 
         self.ab(self.opt.x)
 
-    def dixon_robinson(self, model=0):
+    def dixon_robinson(self, model=1):
         """
         Dixon-Robinson implementation
         :param model: The model number (0 = no time or scoreline parameters)
@@ -93,16 +97,22 @@ class Basketball:
         con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (self.nteams,)}
 
         # Minimize the likelihood function
-        self.opt = minimize(dr.dixon_robinson, x0=ab, args=(self.dataset.as_matrix(), self.teams, model),
+        self.opt = minimize(dr.dixon_robinson, x0=ab, args=(self.dataset, self.teams, model),
                             constraints=con)
 
-        self.ab(self.opt.x)
+        self.ab(self.opt.x, model)
 
-    def ab(self, opt):
+    def ab(self, opt, model=1):
+        """
+        Convert the abilities numpy array into a more usable dict
+        :param opt: Abilities from optimization
+        :param model: Model number determines which parameters are included
+        """
 
         self.abilities = {}
-
         i = 0
+
+        # Attack and defense
         for team in self.teams:
             self.abilities[team] = {
                 'att': opt[i],
@@ -110,10 +120,27 @@ class Basketball:
             }
             i += 1
 
+        # Home Advantage
         self.abilities['home'] = opt[self.nteams * 2]
 
-    def test_model(self, season = None):
+        # Time parameters
+        if model >= 2:
+            self.abilities['time'] = {
+                'q1': opt[self.nteams * 2 + 1],
+                'q2': opt[self.nteams * 2 + 2],
+                'q3': opt[self.nteams * 2 + 3],
+                'q4': opt[self.nteams * 2 + 4]
+            }
 
+    def test_model(self, season=None):
+        """
+        Test the optimized model against a testing set
+        :param season: NBA Season
+        :return: Accuracy of the model
+        """
+
+        # If it is nba data we are working with get current season, else create a testing set with the same
+        # parameters as the training set
         if self.nba is True:
             if season is None:
                 season = [2017]
@@ -124,6 +151,7 @@ class Basketball:
 
         predict = 0
         ngames = 0
+        
         for row in test.itertuples():
             hmean = self.abilities[row.home]['att'] * self.abilities[row.away]['def'] * self.abilities['home']
             amean = self.abilities[row.away]['att'] * self.abilities[row.home]['def']
@@ -153,6 +181,6 @@ class Basketball:
                 predict += 1
             ngames += 1
 
-            print("%s: %.4f\t\t%s: %.4f\t\tWinner: %s" % (row.home, hwin/1000, row.away, awin/1000, winner))
+            print("%s: %.4f\t\t%s: %.4f\t\tWinner: %s" % (row.home, hwin / 1000, row.away, awin / 1000, winner))
 
-        print("Prediction Accuracy: %.4f" % (predict/ngames))
+        print("Prediction Accuracy: %.4f" % (predict / ngames))

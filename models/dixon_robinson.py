@@ -26,16 +26,14 @@ def dixon_coles(abilities, matches, teams):
 
     num = len(teams)
 
-    for game in matches:
-        hteam, ateam = game[0], game[2]
-        hpts, apts = game[1], game[3]
+    for row in matches.itertuples():
 
         # Determine ability indexes
         hi, ai = 0, 0
-        for i in [i for i, x in enumerate(teams) if x == hteam]:
+        for i in [i for i, x in enumerate(teams) if x == row.home]:
             hi = i
 
-        for i in [i for i, x in enumerate(teams) if x == ateam]:
+        for i in [i for i, x in enumerate(teams) if x == row.away]:
             ai = i
 
         # Home and Away Poisson intensities
@@ -43,7 +41,7 @@ def dixon_coles(abilities, matches, teams):
         amean = abilities[hi + num] * abilities[ai]
 
         # Log Likelihood
-        total += poisson.logpmf(hpts, hmean) + poisson.logpmf(apts, amean)
+        total += poisson.logpmf(row.home_pts, hmean) + poisson.logpmf(row.away_pts, amean)
 
     return -total
 
@@ -54,26 +52,23 @@ def dixon_robinson(abilities, matches, teams, model):
     # Number of teams
     num = len(teams)
 
-    for game in matches:
-
-        # Team Names
-        home, away = game[0], game[2]
+    for row in matches.itertuples():
 
         # Team Indexes for the ability array
         hi, ai = 0, 0
-        for i in [i for i, x in enumerate(teams) if x == home]:
+        for i in [i for i, x in enumerate(teams) if x == row.home]:
             hi = i
 
-        for i in [i for i, x in enumerate(teams) if x == away]:
+        for i in [i for i, x in enumerate(teams) if x == row.away]:
             ai = i
 
         like = 0
         hp, ap = 0, 0
 
         # Iterate through each point scored
-        for point in game[4]:
+        for point in row.time:
 
-            if model > 1:
+            if model >= 2:
                 time_stamp = float(point['time'])
 
                 if (11 / 48) < time_stamp <= (12 / 48):
@@ -86,20 +81,20 @@ def dixon_robinson(abilities, matches, teams, model):
                     time = abilities[num * 2 + 4]
                 else:
                     time = 1
+            else:
+                time = 1
 
-            if point['home'] == 0:
+            if point['home'] == 1:
                 hp += int(point['points'])
-                mean = abilities[hi] * abilities[ai + num] * abilities[num * 2]
+                mean = abilities[hi] * abilities[ai + num] * abilities[num * 2] * time
 
                 like += poisson.logpmf(hp, mean)
             else:
                 ap += int(point['points'])
-                mean = abilities[hi + num] * abilities[ai]
+                mean = abilities[hi + num] * abilities[ai] * time
 
                 like += poisson.logpmf(ap, mean)
 
-            if model > 1:
-                like += time
         total += like - poisson.logpmf(hp, (abilities[hi] * abilities[ai + num] * abilities[num * 2])) - poisson.logpmf(
             ap, (abilities[hi + num] * abilities[ai]))
 
