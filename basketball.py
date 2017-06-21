@@ -8,7 +8,6 @@ from models import dixon_robinson as dr
 
 
 class Basketball:
-
     def __init__(self, nba, nteams=4, ngames=4, nmargin=10, season=None):
 
         if season is None:
@@ -162,7 +161,7 @@ class Basketball:
 
         predict = 0
         ngames = 0
-        
+
         for row in test.itertuples():
             hmean = self.abilities[row.home]['att'] * self.abilities[row.away]['def'] * self.abilities['home']
             amean = self.abilities[row.away]['att'] * self.abilities[row.home]['def']

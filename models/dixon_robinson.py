@@ -87,15 +87,20 @@ def dixon_robinson(params, games, teams, model):
 
         # Home and Away Points
         hp, ap = 0, 0
+        hlast4, alast4 = 0, 0
+        havg, aavg = 0, 0
+        check = list(range(4, 52, 4))
+        period = 1
 
         # Match likelihood
         match_like = 0
 
-        # Iterate through each point scored
         for point in row.time:
 
             time = 1
             scoreline = 1
+
+            score = int(point['points'])
 
             # Add Time Parameter to model
             if model >= 2:
@@ -116,19 +121,30 @@ def dixon_robinson(params, games, teams, model):
                 else:
                     time = 1
 
+            if model >= 3:
+                if float(point['time']) >= (check[period] / 48):
+                    havg = hlast4 / 4
+                    aavg = alast4 / 4
+                    hlast4, alast4 = 0, 0
+
+                    period += 1
+
             # If the home team scored add
             if point['home'] == 1:
 
                 # Add to current score
-                hp += int(point['points'])
+                hp += score
                 point = hp
 
-                # Add winning/losing paramter
+                # Add winning/losing parameter
                 if model >= 3:
-                    if hp > ap:
+                    hlast4 += score
+                    if havg - aavg >= 1:
                         scoreline = params[num * 2 + 5]
-                    elif hp < ap:
+                    elif havg - aavg <= -1:
                         scoreline = params[num * 2 + 6]
+                    else:
+                        scoreline = 1
 
                 # Poisson mean
                 mean = params[h] * params[a + num] * params[num * 2] * time * scoreline
@@ -136,15 +152,18 @@ def dixon_robinson(params, games, teams, model):
             else:
 
                 # Add to current score
-                ap += int(point['points'])
+                ap += score
                 point = ap
 
-                # Add winning/losing paramter
+                # Add winning/losing parameter
                 if model >= 3:
-                    if ap > hp:
+                    alast4 += score
+                    if aavg - havg >= 1:
                         scoreline = params[num * 2 + 7]
-                    elif ap < hp:
+                    elif aavg - havg <= -1:
                         scoreline = params[num * 2 + 8]
+                    else:
+                        scoreline = 1
 
                 # Poisson mean
                 mean = params[h + num] * params[a] * time * scoreline
