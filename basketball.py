@@ -8,6 +8,7 @@ from models import dixon_robinson as dr
 
 
 class Basketball:
+
     def __init__(self, nba, nteams=4, ngames=4, nmargin=10, season=None):
 
         if season is None:
@@ -57,7 +58,7 @@ class Basketball:
             params = np.full((1, 5), 1.5)
         # Model is extended by adding scoreline parameters if a team is winning
         elif model == 3:
-            params = np.full((1, 7), 1.5)
+            params = np.full((1, 9), 1.5)
         else:
             params = np.full((1, self.nteams + 1), 1)
 
@@ -130,6 +131,16 @@ class Basketball:
                 'q2': opt[self.nteams * 2 + 2],
                 'q3': opt[self.nteams * 2 + 3],
                 'q4': opt[self.nteams * 2 + 4]
+            }
+
+        if model >= 3:
+            self.abilities['lambda'] = {
+                '10': opt[self.nteams * 2 + 5],
+                '01': opt[self.nteams * 2 + 6],
+            }
+            self.abilities['mu'] = {
+                '10': opt[self.nteams * 2 + 7],
+                '01': opt[self.nteams * 2 + 8]
             }
 
     def test_model(self, season=None):
