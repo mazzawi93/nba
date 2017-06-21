@@ -87,6 +87,12 @@ def determine_home_win(location, result):
 
 
 def stat_distribution(url):
+    """
+    Analyze the time stamps of a game for all it's statistics
+    :param url: The URL of the game for the time stamps
+    :return: Dict containing time of each stat in a game
+    """
+
     # Request
     r = requests.get(url)
     soup = BeautifulSoup(r.content, "html.parser")
