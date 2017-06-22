@@ -8,10 +8,10 @@ from models import dixon_robinson as dr
 
 
 class Basketball:
-    def __init__(self, nba, nteams=4, ngames=4, nmargin=10, season=None):
+    def __init__(self, nba, nteams=4, ngames=4, nmargin=10, season=None, month=None):
 
         if season is None:
-            season = [2016]
+            season = 2016
 
         self.opt = None
         self.nba = nba
@@ -19,7 +19,7 @@ class Basketball:
 
         if nba is True:
 
-            self.dataset = datasets.match_point_times(season)
+            self.dataset = datasets.match_point_times(season=season, month=month)
             self.teams = process_utils.name_teams(True)
             self.nteams = 30
 
