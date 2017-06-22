@@ -56,13 +56,6 @@ class GameScraper:
 
                 match = {}
 
-                # Find the URL for a game's play by play stat for the time for each stat
-                pbp = game.find('a')
-                pbp_url = 'http://www.basketball-reference.com/boxscores/pbp' + pbp['href'][-18:]
-                pbp_stats = scrape_utils.stat_distribution(pbp_url)
-
-                # print(pbp_stats)
-
                 # Loop through each stat
                 for stat in game.find_all('td'):
                     match[stat['data-stat']] = stat.string
@@ -115,9 +108,7 @@ class GameScraper:
                 }
 
                 result = {'date': datetime.strptime(match['date_game'], "%Y-%m-%d"),
-                          'season': year,
-                          'home_time': pbp_stats['home'],
-                          'away_time': pbp_stats['away']}
+                          'season': year}
 
                 # Place the teams in the correct spot depending on who is the home team
                 if match['game_location'] is None:
@@ -130,7 +121,17 @@ class GameScraper:
                 # Store match result
                 result['result'] = scrape_utils.determine_home_win(match['game_location'], match['game_result'])
 
-                if collection.find_one(result) is None:
+                # If game is not in DB, then scrape time stamps for all stats and store
+                if collection.find_one({'home.team': result['home'], 'away.team': result['away'], 'date': result['date']}) is None:
+
+                    # Find the URL for a game's play by play stat for the time for each stat
+                    pbp = game.find('a')
+                    pbp_url = 'http://www.basketball-reference.com/boxscores/pbp' + pbp['href'][-18:]
+                    pbp_stats = scrape_utils.stat_distribution(pbp_url)
+
+                    result['home_time'] = pbp_stats['home'],
+                    result['away_time'] = pbp_stats['away']
+
                     collection.insert_one(result)
         except AttributeError:
             print("%s doesn't exist" % team)
