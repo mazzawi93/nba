@@ -1,7 +1,6 @@
-import string
-
 import numpy as np
 from scipy.optimize import minimize
+from scipy.stats import poisson
 
 from db import datasets
 from db import process_utils
@@ -15,6 +14,8 @@ class Basketball:
             season = [2016]
 
         self.opt = None
+        self.nba = nba
+        self.abilities = None
 
         if nba is True:
 
@@ -33,32 +34,43 @@ class Basketball:
             self.dataset = datasets.create_test_set(nteams, ngames, nmargin)
             self.teams = process_utils.name_teams(False, nteams)
             self.nteams = nteams
+            self.ngames = ngames
+            self.nmargin = nmargin
 
-    def initial_guess(self, model=0):
+    def initial_guess(self, model=1):
         """
         Create an initial guess for the minimization function
-        :param model:
-        :return: Numpy array of team abilities (Attack, Defense) and Home Advantage
+        :param model: The model implemented (1 = Base model (Att, Def, Home), 2 = Time Parameters, 3 = winning/losing)
+        :return: Numpy array of team abilities (Attack, Defense) and Home Advantage and other factors
         """
 
+        # Attack and Defence parameters
         att = np.full((1, self.nteams), 100)
 
-        if model == 0:
-            dh = np.full((1, self.nteams + 1), 1)
+        # Base model only contains the home advantage
+        if model == 1:
+            params = np.full((1, self.nteams + 1), 1.5)
         # The time parameters are added to the model
-        elif model == 1:
-            dh = np.full((1, self.nteams + 5), 1)
+        elif model == 2:
+            params = np.full((1, self.nteams + 5), 1.5)
+        # Model is extended by adding scoreline parameters if a team is winning
+        elif model == 3:
+            params = np.full((1, self.nteams + 9), 1.5)
+        # Extend model with larger winning margins
+        elif model == 4:
+            params = np.full((1, self.nteams + 17), 1.5)
+        # Time Rates
+        elif model == 5:
+            params = np.full((1, self.nteams + 7), 1.5)
         else:
-            dh = np.full((1, self.nteams + 1), 1)
+            params = np.full((1, self.nteams + 1), 1)
 
-        return np.append(att, dh)
+        return np.append(att, params)
 
     def dixon_coles(self):
         """
         Apply the dixon coles model to an NBA season to find the attack and defense parameters for each team
         as well as the home court advantage
-        :param season: NBA Season
-        :return:
         """
 
         # Initial Guess for the minimization
@@ -67,7 +79,6 @@ class Basketball:
         # Game Data without time
         nba = self.dataset
         nba = nba.drop('time', axis=1)
-        nba = nba.as_matrix()
 
         # Minimize Constraint
         con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (self.nteams,)}
@@ -75,7 +86,13 @@ class Basketball:
         # Minimize the likelihood function
         self.opt = minimize(dr.dixon_coles, x0=ab, args=(nba, self.teams), constraints=con)
 
-    def dixon_robinson(self, model=0):
+        self.ab(self.opt.x)
+
+    def dixon_robinson(self, model=1):
+        """
+        Dixon-Robinson implementation
+        :param model: The model number (0 = no time or scoreline parameters)
+        """
 
         # Initial Guess for the minimization
         ab = self.initial_guess(model)
@@ -84,28 +101,121 @@ class Basketball:
         con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (self.nteams,)}
 
         # Minimize the likelihood function
-        self.opt = minimize(dr.dixon_robinson, x0=ab, args=(self.dataset.as_matrix(), self.teams, model), constraints=con)
+        self.opt = minimize(dr.dixon_robinson, x0=ab, args=(self.dataset, self.teams, model),
+                            constraints=con)
 
-    def print_abilities(self):
+        self.ab(self.opt.x, model)
+
+    def ab(self, opt, model=1):
         """
-        Print the team parameters (attack, defense and home) in a neat format
+        Convert the abilities numpy array into a more usable dict
+        :param opt: Abilities from optimization
+        :param model: Model number determines which parameters are included
         """
 
-        if self.opt is not None:
+        self.abilities = {}
+        i = 0
 
-            print('Team\tAttack\tDefence')
+        # Attack and defense
+        for team in self.teams:
+            self.abilities[team] = {
+                'att': opt[i],
+                'def': opt[i + self.nteams]
+            }
+            i += 1
 
-            i = 0
-            for team in self.teams:
-                print('%s\t\t%.2f\t%.2f' % (team, self.opt.x[i], self.opt.x[i+self.nteams]))
-                i += 1
+        # Home Advantage
+        self.abilities['home'] = opt[self.nteams * 2]
 
-            print("Home Advantage:\t%.2f" % self.opt.x[self.nteams*2])
+        # Time parameters
+        if model >= 2:
+            self.abilities['time'] = {
+                'q1': opt[self.nteams * 2 + 1],
+                'q2': opt[self.nteams * 2 + 2],
+                'q3': opt[self.nteams * 2 + 3],
+                'q4': opt[self.nteams * 2 + 4]
+            }
 
+        if model == 3:
+            self.abilities['lambda'] = {
+                '10': opt[self.nteams * 2 + 5],
+                '01': opt[self.nteams * 2 + 6],
+            }
+            self.abilities['mu'] = {
+                '10': opt[self.nteams * 2 + 7],
+                '01': opt[self.nteams * 2 + 8]
+            }
+        elif model == 4:
+            self.abilities['lambda'] = {
+                '10': opt[self.nteams * 2 + 5],
+                '01': opt[self.nteams * 2 + 6],
+                '20': opt[self.nteams * 2 + 11],
+                '02': opt[self.nteams * 2 + 12],
+                '30': opt[self.nteams * 2 + 9],
+                '03': opt[self.nteams * 2 + 10],
+            }
+            self.abilities['mu'] = {
+                '10': opt[self.nteams * 2 + 7],
+                '01': opt[self.nteams * 2 + 8],
+                '20': opt[self.nteams * 2 + 15],
+                '02': opt[self.nteams * 2 + 16],
+                '30': opt[self.nteams * 2 + 13],
+                '03': opt[self.nteams * 2 + 14]
+            }
 
+        if model == 5:
+            self.abilities['time']['home'] = opt[self.nteams * 2 + 5]
+            self.abilities['time']['away'] = opt[self.nteams * 2 + 6]
 
+    def test_model(self, season=None):
+        """
+        Test the optimized model against a testing set
+        :param season: NBA Season
+        :return: Accuracy of the model
+        """
 
+        # If it is nba data we are working with get current season, else create a testing set with the same
+        # parameters as the training set
+        if self.nba is True:
+            if season is None:
+                season = [2017]
 
+            test = datasets.match_point_times(season)
+        else:
+            test = datasets.create_test_set(self.nteams, self.ngames, self.nmargin)
 
+        predict = 0
+        ngames = 0
 
+        for row in test.itertuples():
+            hmean = self.abilities[row.home]['att'] * self.abilities[row.away]['def'] * self.abilities['home']
+            amean = self.abilities[row.away]['att'] * self.abilities[row.home]['def']
 
+            hpts = poisson.rvs(mu=hmean, size=1000)
+            apts = poisson.rvs(mu=amean, size=1000)
+
+            hwin, awin = 0, 0
+
+            for i in range(1000):
+                if hpts[i] >= apts[i]:
+                    hwin += 1
+                else:
+                    awin += 1
+
+            if hwin >= awin:
+                predicted = row.home
+            else:
+                predicted = row.away
+
+            if row.home_pts > row.away_pts:
+                winner = row.home
+            else:
+                winner = row.away
+
+            if predicted == winner:
+                predict += 1
+            ngames += 1
+
+            print("%s: %.4f\t\t%s: %.4f\t\tWinner: %s" % (row.home, hwin / 1000, row.away, awin / 1000, winner))
+
+        print("Prediction Accuracy: %.4f" % (predict / ngames))
