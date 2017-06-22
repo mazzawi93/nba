@@ -46,22 +46,25 @@ class Basketball:
 
         # Attack and Defence parameters
         att = np.full((1, self.nteams), 100)
-        d = np.full((1, self.nteams), 1)
-        team = np.append(att, d)
 
         # Base model only contains the home advantage
         if model == 1:
-            params = np.array([1])
+            params = np.full((1, self.nteams + 1), 1.5)
         # The time parameters are added to the model
         elif model == 2:
-            params = np.full((1, 5), 1.5)
+            params = np.full((1, self.nteams + 5), 1.5)
         # Model is extended by adding scoreline parameters if a team is winning
         elif model == 3:
-            params = np.full((1, 9), 1.5)
+            params = np.full((1, self.nteams + 9), 1.5)
+        # Extend model with larger winning margins
+        elif model == 4:
+            params = np.full((1, self.nteams + 17), 1.5)
+        elif model == 5:
+            params = np.full((1, self.nteams + 7), 1.5)
         else:
             params = np.full((1, self.nteams + 1), 1)
 
-        return np.append(team, params)
+        return np.append(att, params)
 
     def dixon_coles(self):
         """
@@ -132,7 +135,7 @@ class Basketball:
                 'q4': opt[self.nteams * 2 + 4]
             }
 
-        if model >= 3:
+        if model == 3:
             self.abilities['lambda'] = {
                 '10': opt[self.nteams * 2 + 5],
                 '01': opt[self.nteams * 2 + 6],
@@ -141,7 +144,23 @@ class Basketball:
                 '10': opt[self.nteams * 2 + 7],
                 '01': opt[self.nteams * 2 + 8]
             }
-
+        elif model == 4:
+            self.abilities['lambda'] = {
+                '10': opt[self.nteams * 2 + 5],
+                '01': opt[self.nteams * 2 + 6],
+                '20': opt[self.nteams * 2 + 11],
+                '02': opt[self.nteams * 2 + 12],
+                '30': opt[self.nteams * 2 + 9],
+                '03': opt[self.nteams * 2 + 10],
+            }
+            self.abilities['mu'] = {
+                '10': opt[self.nteams * 2 + 7],
+                '01': opt[self.nteams * 2 + 8],
+                '20': opt[self.nteams * 2 + 15],
+                '02': opt[self.nteams * 2 + 16],
+                '30': opt[self.nteams * 2 + 13],
+                '03': opt[self.nteams * 2 + 14]
+            }
     def test_model(self, season=None):
         """
         Test the optimized model against a testing set

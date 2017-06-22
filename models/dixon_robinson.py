@@ -1,4 +1,5 @@
 from scipy.stats import poisson
+import numpy as np
 
 
 def attack_constraint(params, nteams):
@@ -143,8 +144,16 @@ def dixon_robinson(params, games, teams, model):
                         scoreline = params[num * 2 + 5]
                     elif havg - aavg <= -1:
                         scoreline = params[num * 2 + 6]
-                    else:
-                        scoreline = 1
+
+                    if model == 4:
+                        if havg - aavg >= 3:
+                            scoreline = params[num * 2 + 9]
+                        elif havg - aavg <= -3:
+                            scoreline = params[num * 2 + 10]
+                        elif havg - aavg >= 2:
+                            scoreline = params[num * 2 + 11]
+                        elif havg - aavg <= -2:
+                            scoreline = params[num * 2 + 12]
 
                 # Poisson mean
                 mean = params[h] * params[a + num] * params[num * 2] * time * scoreline
@@ -162,8 +171,16 @@ def dixon_robinson(params, games, teams, model):
                         scoreline = params[num * 2 + 7]
                     elif aavg - havg <= -1:
                         scoreline = params[num * 2 + 8]
-                    else:
-                        scoreline = 1
+
+                    if model == 4:
+                        if aavg - havg >= 3:
+                            scoreline = params[num * 2 + 13]
+                        elif aavg - havg <= -3:
+                            scoreline = params[num * 2 + 14]
+                        elif aavg - havg >= 2:
+                            scoreline = params[num * 2 + 15]
+                        elif aavg - havg <= -2:
+                            scoreline = params[num * 2 + 16]
 
                 # Poisson mean
                 mean = params[h + num] * params[a] * time * scoreline
