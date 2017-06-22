@@ -59,6 +59,7 @@ class Basketball:
         # Extend model with larger winning margins
         elif model == 4:
             params = np.full((1, self.nteams + 17), 1.5)
+        # Time Rates
         elif model == 5:
             params = np.full((1, self.nteams + 7), 1.5)
         else:
@@ -161,6 +162,11 @@ class Basketball:
                 '30': opt[self.nteams * 2 + 13],
                 '03': opt[self.nteams * 2 + 14]
             }
+
+        if model == 5:
+            self.abilities['time']['home'] = opt[self.nteams * 2 + 5]
+            self.abilities['time']['away'] = opt[self.nteams * 2 + 6]
+
     def test_model(self, season=None):
         """
         Test the optimized model against a testing set

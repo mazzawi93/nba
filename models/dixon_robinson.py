@@ -102,10 +102,10 @@ def dixon_robinson(params, games, teams, model):
             scoreline = 1
 
             score = int(point['points'])
+            time_stamp = float(point['time'])
 
             # Add Time Parameter to model
             if model >= 2:
-                time_stamp = float(point['time'])
 
                 # First Quarter
                 if (11 / 48) < time_stamp <= (12 / 48):
@@ -122,8 +122,8 @@ def dixon_robinson(params, games, teams, model):
                 else:
                     time = 1
 
-            if model >= 3:
-                if float(point['time']) >= (check[period] / 48):
+            if model == 3 or model == 4:
+                if time_stamp >= (check[period] / 48):
                     havg = hlast4 / 4
                     aavg = alast4 / 4
                     hlast4, alast4 = 0, 0
@@ -133,12 +133,14 @@ def dixon_robinson(params, games, teams, model):
             # If the home team scored add
             if point['home'] == 1:
 
+                time_vary = params[num*2 + 5]
+
                 # Add to current score
                 hp += score
                 point = hp
 
                 # Add winning/losing parameter
-                if model >= 3:
+                if model == 3 or model == 4:
                     hlast4 += score
                     if havg - aavg >= 1:
                         scoreline = params[num * 2 + 5]
@@ -160,12 +162,14 @@ def dixon_robinson(params, games, teams, model):
             # Away Team scored
             else:
 
+                time_vary = params[num * 2 + 6]
+
                 # Add to current score
                 ap += score
                 point = ap
 
                 # Add winning/losing parameter
-                if model >= 3:
+                if model == 3 or model == 4:
                     alast4 += score
                     if aavg - havg >= 1:
                         scoreline = params[num * 2 + 7]
@@ -187,6 +191,9 @@ def dixon_robinson(params, games, teams, model):
 
             # Add to log likelihood
             match_like += poisson.logpmf(point, mean)
+
+            if model == 5:
+                match_like += np.log(time_vary * time_stamp)
 
         # Total Log Likelihood
         total += match_like - poisson.logpmf(hp, (params[h] * params[a + num] * params[num * 2])) - poisson.logpmf(
