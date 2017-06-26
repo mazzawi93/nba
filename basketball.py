@@ -8,10 +8,10 @@ from models import dixon_robinson as dr
 
 
 class Basketball:
-    def __init__(self, nba, nteams=4, ngames=4, nmargin=10, season=None):
+    def __init__(self, nba, nteams=4, ngames=4, nmargin=10, season=None, month=None):
 
         if season is None:
-            season = [2016]
+            season = 2016
 
         self.opt = None
         self.nba = nba
@@ -19,7 +19,7 @@ class Basketball:
 
         if nba is True:
 
-            self.dataset = datasets.match_point_times(season)
+            self.dataset = datasets.match_point_times(season=season, month=month)
             self.teams = process_utils.name_teams(True)
             self.nteams = 30
 
@@ -46,26 +46,28 @@ class Basketball:
 
         # Attack and Defence parameters
         att = np.full((1, self.nteams), 100)
+        defense = np.full((1, self.nteams), 0.5)
+        teams = np.append(att, defense)
 
         # Base model only contains the home advantage
         if model == 1:
-            params = np.full((1, self.nteams + 1), 1.5)
+            params = np.full((1, 1), 1.5)
         # The time parameters are added to the model
         elif model == 2:
-            params = np.full((1, self.nteams + 5), 1.5)
+            params = np.full((1, 5), 1.5)
         # Model is extended by adding scoreline parameters if a team is winning
         elif model == 3:
-            params = np.full((1, self.nteams + 9), 1.5)
+            params = np.full((1, 9), 1.5)
         # Extend model with larger winning margins
         elif model == 4:
-            params = np.full((1, self.nteams + 17), 1.5)
+            params = np.full((1, 17), 1.5)
         # Time Rates
         elif model == 5:
-            params = np.full((1, self.nteams + 7), 1.5)
+            params = np.full((1, 7), 1.5)
         else:
-            params = np.full((1, self.nteams + 1), 1)
+            params = np.full((1, 1), 1)
 
-        return np.append(att, params)
+        return np.append(teams, params)
 
     def dixon_coles(self):
         """
@@ -138,36 +140,36 @@ class Basketball:
 
         if model == 3:
             self.abilities['lambda'] = {
-                '10': opt[self.nteams * 2 + 5],
-                '01': opt[self.nteams * 2 + 6],
+                '+1': opt[self.nteams * 2 + 5],
+                '-1': opt[self.nteams * 2 + 6],
             }
             self.abilities['mu'] = {
-                '10': opt[self.nteams * 2 + 7],
-                '01': opt[self.nteams * 2 + 8]
+                '+1': opt[self.nteams * 2 + 7],
+                '-1': opt[self.nteams * 2 + 8]
             }
         elif model == 4:
             self.abilities['lambda'] = {
-                '10': opt[self.nteams * 2 + 5],
-                '01': opt[self.nteams * 2 + 6],
-                '20': opt[self.nteams * 2 + 11],
-                '02': opt[self.nteams * 2 + 12],
-                '30': opt[self.nteams * 2 + 9],
-                '03': opt[self.nteams * 2 + 10],
+                '+1': opt[self.nteams * 2 + 5],
+                '-1': opt[self.nteams * 2 + 6],
+                '+2': opt[self.nteams * 2 + 11],
+                '-2': opt[self.nteams * 2 + 12],
+                '+3': opt[self.nteams * 2 + 9],
+                '-3': opt[self.nteams * 2 + 10],
             }
             self.abilities['mu'] = {
-                '10': opt[self.nteams * 2 + 7],
-                '01': opt[self.nteams * 2 + 8],
-                '20': opt[self.nteams * 2 + 15],
-                '02': opt[self.nteams * 2 + 16],
-                '30': opt[self.nteams * 2 + 13],
-                '03': opt[self.nteams * 2 + 14]
+                '+1': opt[self.nteams * 2 + 7],
+                '-1': opt[self.nteams * 2 + 8],
+                '+2': opt[self.nteams * 2 + 15],
+                '-2': opt[self.nteams * 2 + 16],
+                '+3': opt[self.nteams * 2 + 13],
+                '-3': opt[self.nteams * 2 + 14]
             }
 
         if model == 5:
             self.abilities['time']['home'] = opt[self.nteams * 2 + 5]
             self.abilities['time']['away'] = opt[self.nteams * 2 + 6]
 
-    def test_model(self, season=None):
+    def test_model(self, model=0, season=None, month=None):
         """
         Test the optimized model against a testing set
         :param season: NBA Season
@@ -180,7 +182,7 @@ class Basketball:
             if season is None:
                 season = [2017]
 
-            test = datasets.match_point_times(season)
+            test = datasets.match_point_times(season, month)
         else:
             test = datasets.create_test_set(self.nteams, self.ngames, self.nmargin)
 
@@ -191,18 +193,16 @@ class Basketball:
             hmean = self.abilities[row.home]['att'] * self.abilities[row.away]['def'] * self.abilities['home']
             amean = self.abilities[row.away]['att'] * self.abilities[row.home]['def']
 
-            hpts = poisson.rvs(mu=hmean, size=1000)
-            apts = poisson.rvs(mu=amean, size=1000)
+            homea, awaya = 0, 0
+            for h in range(1, 150):
+                for a in range(1, 150):
 
-            hwin, awin = 0, 0
+                    if h > a:
+                        homea += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+                    elif h < a:
+                        awaya += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
 
-            for i in range(1000):
-                if hpts[i] >= apts[i]:
-                    hwin += 1
-                else:
-                    awin += 1
-
-            if hwin >= awin:
+            if hmean >= amean:
                 predicted = row.home
             else:
                 predicted = row.away
@@ -216,6 +216,7 @@ class Basketball:
                 predict += 1
             ngames += 1
 
-            print("%s: %.4f\t\t%s: %.4f\t\tWinner: %s" % (row.home, hwin / 1000, row.away, awin / 1000, winner))
+            print("%s: %.4f\t\t%s: %.4f\t\tWinner: %s\t\t%d/%d\t%.4f" % (
+            row.home, homea, row.away, awaya, winner, predict, ngames, (predict / ngames)))
 
         print("Prediction Accuracy: %.4f" % (predict / ngames))

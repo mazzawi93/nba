@@ -9,20 +9,15 @@ def season_check(season):
     """
     Helper function to determine if season is correctly entered
     :param season: List of seasons or None
-    :return: Season List
     """
 
     if not isinstance(season, list):
         if season is not None:
             raise TypeError("Season must be a list for query purposes")
-        else:
-            return [2012, 2013, 2014, 2015, 2016, 2017]
     else:
         for year in season:
             if year < 2012 or year > 2017:
                 raise ValueError("Years must be within the range 2012-2017")
-
-    return season
 
 
 def team_check(team):
@@ -35,14 +30,10 @@ def team_check(team):
     if not isinstance(team, list):
         if team is not None:
             raise TypeError("Team must be a list for query purposes")
-        else:
-            return teams
     else:
         for city in team:
             if city not in teams:
                 raise ValueError("Team not in database")
-
-    return team
 
 
 def name_teams(nba, nteams=None):

@@ -101,29 +101,30 @@ def dixon_robinson(params, games, teams, model):
             time = 1
             scoreline = 1
 
-            score = int(point['points'])
-            time_stamp = float(point['time'])
+            home_score = point['home']
+            away_score = point['away']
+            time_stamp = point['time']
 
             # Add Time Parameter to model
             if model >= 2:
 
                 # First Quarter
-                if (11 / 48) < time_stamp <= (12 / 48):
+                if 11 < time_stamp <= 12:
                     time = params[num * 2 + 1]
                 # Second Quarter (Half Time)
-                elif (23 / 48) < time_stamp <= (24 / 48):
+                elif 23 < time_stamp <= 24:
                     time = params[num * 2 + 2]
                 # Third Quarter
-                elif (35 / 48) < time_stamp <= (36 / 48):
+                elif 35 < time_stamp <= 36:
                     time = params[num * 2 + 3]
                 # Fourth Quarter (End of Game)
-                elif (47 / 48) < time_stamp <= (48 / 48):
+                elif 47 < time_stamp <= 48:
                     time = params[num * 2 + 4]
                 else:
                     time = 1
 
             if model == 3 or model == 4:
-                if time_stamp >= (check[period] / 48):
+                if time_stamp > check[period]:
                     havg = hlast4 / 4
                     aavg = alast4 / 4
                     hlast4, alast4 = 0, 0
@@ -131,17 +132,18 @@ def dixon_robinson(params, games, teams, model):
                     period += 1
 
             # If the home team scored add
-            if point['home'] == 1:
+            if home_score > 0:
 
-                time_vary = params[num*2 + 5]
+                if model == 5:
+                    time_vary = params[num*2 + 5]
 
                 # Add to current score
-                hp += score
+                hp += home_score
                 point = hp
 
                 # Add winning/losing parameter
                 if model == 3 or model == 4:
-                    hlast4 += score
+                    hlast4 += home_score
                     if havg - aavg >= 1:
                         scoreline = params[num * 2 + 5]
                     elif havg - aavg <= -1:
@@ -159,18 +161,21 @@ def dixon_robinson(params, games, teams, model):
 
                 # Poisson mean
                 mean = params[h] * params[a + num] * params[num * 2] * time * scoreline
-            # Away Team scored
-            else:
+                match_like += poisson.logpmf(point, mean)
 
-                time_vary = params[num * 2 + 6]
+            # Away Team scored
+            if away_score > 0:
+
+                if model == 5:
+                    time_vary = params[num * 2 + 6]
 
                 # Add to current score
-                ap += score
+                ap += away_score
                 point = ap
 
                 # Add winning/losing parameter
                 if model == 3 or model == 4:
-                    alast4 += score
+                    alast4 += away_score
                     if aavg - havg >= 1:
                         scoreline = params[num * 2 + 7]
                     elif aavg - havg <= -1:
@@ -189,11 +194,11 @@ def dixon_robinson(params, games, teams, model):
                 # Poisson mean
                 mean = params[h + num] * params[a] * time * scoreline
 
-            # Add to log likelihood
-            match_like += poisson.logpmf(point, mean)
+                # Add to log likelihood
+                match_like += poisson.logpmf(point, mean)
 
-            if model == 5:
-                match_like += np.log(time_vary * time_stamp)
+            #if model == 5:
+            #    match_like += np.log(time_vary * time_stamp)
 
         # Total Log Likelihood
         total += match_like - poisson.logpmf(hp, (params[h] * params[a + num] * params[num * 2])) - poisson.logpmf(
