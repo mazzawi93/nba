@@ -5,7 +5,6 @@ import pandas as pd
 from pymongo import MongoClient
 
 from db import process_data
-from db import process_utils
 
 
 def match_point_times(season=None, month=None):
@@ -14,7 +13,6 @@ def match_point_times(season=None, month=None):
     times for points scored (divided by 48 so the times are (0, 1]).
 
     :param month: Calendar Month
-    :param home_win:
     :param season: NBA Season (All stored season selected if None)
     :return: Pandas Dataframe
     """
@@ -73,39 +71,47 @@ def match_point_times(season=None, month=None):
         {'$sort': {'date': 1}}
     ]
 
-    games = collection.aggregate(pipeline)
+    games = collection.aggregate(pipeline, allowDiskUse=True)
 
     matches = []
 
     for game in games:
 
-        point_times = []
+        # Store all points by the minute instead of all individually
+        point_dict = {}
 
         home_score = 0
         for stat in game['home_time']:
             if 'points' in stat:
-                if stat['time'] <= 48:
-                    stat['time'] = round(stat['time'] / 48, 4)
-                    stat['home'] = 1
+                time = int(stat['time']) + 1
+                if time <= 48:
+
+                    if time not in point_dict:
+                        point_dict[time] = {'home': 0, 'away': 0, 'time': round(float(time / 48), 5)}
+
+                    point_dict[time]['home'] += stat['points']
                     home_score += stat['points']
-                    point_times.append(stat)
 
         away_score = 0
         for stat in game['away_time']:
             if 'points' in stat:
-                if stat['time'] <= 48:
-                    stat['time'] = round(stat['time'] / 48, 4)
-                    stat['home'] = 0
-                    away_score += stat['points']
-                    point_times.append(stat)
+                time = int(stat['time']) + 1
+                if time <= 48:
 
-        point_times.sort(key=operator.itemgetter('time'))
+                    if time not in point_dict:
+                        point_dict[time] = {'home': 0, 'away': 0, 'time': round(float(time / 48), 5)}
+
+                    point_dict[time]['away'] += stat['points']
+                    away_score += stat['points']
+
+        point_list = [v for v in point_dict.values()]
+        point_list.sort(key=operator.itemgetter('time'))
 
         match = {'home': game['home']['team'],
                  'away': game['away']['team'],
                  'home_pts': home_score,
                  'away_pts': away_score,
-                 'time': point_times}
+                 'time': point_list}
 
         matches.append(match)
 
@@ -170,33 +176,40 @@ def create_test_set(t, g, margin):
                     game['away'] = team
                     match = process_data.select_match(-margin, ids)
 
-                # Iterate through point times
-                point_times = []
+                # Store all points by the minute instead of all individually
+                point_dict = {}
 
                 home_score = 0
                 for stat in match['home_time']:
                     if 'points' in stat:
-                        if stat['time'] <= 48:
-                            stat['time'] = round(stat['time'] / 48, 4)
-                            stat['home'] = 1
+                        time = int(stat['time']) + 1
+                        if time <= 48:
+
+                            if time not in point_dict:
+                                point_dict[time] = {'home': 0, 'away': 0, 'time': round(float(time / 48), 5)}
+
+                            point_dict[time]['home'] += stat['points']
                             home_score += stat['points']
-                            point_times.append(stat)
 
                 away_score = 0
                 for stat in match['away_time']:
                     if 'points' in stat:
-                        if stat['time'] <= 48:
-                            stat['time'] = round(stat['time'] / 48, 4)
-                            stat['home'] = 0
-                            away_score += stat['points']
-                            point_times.append(stat)
+                        time = int(stat['time']) + 1
+                        if time <= 48:
 
-                # Sort the points based on time
-                point_times.sort(key=operator.itemgetter('time'))
+                            if time not in point_dict:
+                                point_dict[time] = {'home': 0, 'away': 0, 'time': round(float(time / 48), 5)}
+
+                            point_dict[time]['away'] += stat['points']
+                            away_score += stat['points']
+
+                # Convert to list to sort by time
+                point_list = [v for v in point_dict.values()]
+                point_list.sort(key=operator.itemgetter('time'))
 
                 game['home_pts'] = home_score
                 game['away_pts'] = away_score
-                game['time'] = point_times
+                game['time'] = point_list
 
                 # Append the id to the list so that the match doesn't get selected again
                 ids.append(match['_id'])

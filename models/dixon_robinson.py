@@ -133,7 +133,8 @@ def dixon_robinson(params, games, teams, model):
             # If the home team scored add
             if point['home'] == 1:
 
-                time_vary = params[num*2 + 5]
+                if model == 5:
+                    time_vary = params[num*2 + 5]
 
                 # Add to current score
                 hp += score
@@ -162,7 +163,8 @@ def dixon_robinson(params, games, teams, model):
             # Away Team scored
             else:
 
-                time_vary = params[num * 2 + 6]
+                if model == 5:
+                    time_vary = params[num * 2 + 6]
 
                 # Add to current score
                 ap += score
