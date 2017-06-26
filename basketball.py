@@ -46,26 +46,28 @@ class Basketball:
 
         # Attack and Defence parameters
         att = np.full((1, self.nteams), 100)
+        defense = np.full((1, self.nteams), 0.5)
+        teams = np.append(att, defense)
 
         # Base model only contains the home advantage
         if model == 1:
-            params = np.full((1, self.nteams + 1), 1.5)
+            params = np.full((1, 1), 1.5)
         # The time parameters are added to the model
         elif model == 2:
-            params = np.full((1, self.nteams + 5), 1.5)
+            params = np.full((1, 5), 1.5)
         # Model is extended by adding scoreline parameters if a team is winning
         elif model == 3:
-            params = np.full((1, self.nteams + 9), 1.5)
+            params = np.full((1, 9), 1.5)
         # Extend model with larger winning margins
         elif model == 4:
-            params = np.full((1, self.nteams + 17), 1.5)
+            params = np.full((1, 17), 1.5)
         # Time Rates
         elif model == 5:
-            params = np.full((1, self.nteams + 7), 1.5)
+            params = np.full((1, 7), 1.5)
         else:
-            params = np.full((1, self.nteams + 1), 1)
+            params = np.full((1, 1), 1)
 
-        return np.append(att, params)
+        return np.append(teams, params)
 
     def dixon_coles(self):
         """

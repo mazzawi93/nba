@@ -87,7 +87,7 @@ def match_point_times(season=None, month=None):
                 if time <= 48:
 
                     if time not in point_dict:
-                        point_dict[time] = {'home': 0, 'away': 0, 'time': round(float(time / 48), 5)}
+                        point_dict[time] = {'home': 0, 'away': 0, 'time': time}
 
                     point_dict[time]['home'] += stat['points']
                     home_score += stat['points']
@@ -99,7 +99,7 @@ def match_point_times(season=None, month=None):
                 if time <= 48:
 
                     if time not in point_dict:
-                        point_dict[time] = {'home': 0, 'away': 0, 'time': round(float(time / 48), 5)}
+                        point_dict[time] = {'home': 0, 'away': 0, 'time': time}
 
                     point_dict[time]['away'] += stat['points']
                     away_score += stat['points']
@@ -186,7 +186,7 @@ def create_test_set(t, g, margin):
                         if time <= 48:
 
                             if time not in point_dict:
-                                point_dict[time] = {'home': 0, 'away': 0, 'time': round(float(time / 48), 5)}
+                                point_dict[time] = {'home': 0, 'away': 0, 'time': time}
 
                             point_dict[time]['home'] += stat['points']
                             home_score += stat['points']
@@ -198,7 +198,7 @@ def create_test_set(t, g, margin):
                         if time <= 48:
 
                             if time not in point_dict:
-                                point_dict[time] = {'home': 0, 'away': 0, 'time': round(float(time / 48), 5)}
+                                point_dict[time] = {'home': 0, 'away': 0, 'time': time}
 
                             point_dict[time]['away'] += stat['points']
                             away_score += stat['points']
