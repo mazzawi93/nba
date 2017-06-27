@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.optimize import minimize
 from scipy.stats import poisson
+from pymongo import MongoClient
 
 from db import datasets
 from db import process_utils
@@ -22,6 +23,8 @@ class Basketball:
             self.dataset = datasets.match_point_times(season=season, month=month)
             self.teams = process_utils.name_teams(True)
             self.nteams = 30
+            self.season = season
+            self.month = month
 
         else:
 
@@ -115,7 +118,9 @@ class Basketball:
         :param model: Model number determines which parameters are included
         """
 
-        self.abilities = {}
+        self.abilities = {
+            'model': model
+        }
         i = 0
 
         # Attack and defense
@@ -217,6 +222,41 @@ class Basketball:
             ngames += 1
 
             print("%s: %.4f\t\t%s: %.4f\t\tWinner: %s\t\t%d/%d\t%.4f" % (
-            row.home, homea, row.away, awaya, winner, predict, ngames, (predict / ngames)))
+                row.home, homea, row.away, awaya, winner, predict, ngames, (predict / ngames)))
 
         print("Prediction Accuracy: %.4f" % (predict / ngames))
+
+    def store_abilities(self):
+        """
+        Store team abilities in MongoDB
+        """
+
+        if self.nba is True:
+            client = MongoClient()
+            db = client.basketball
+            collection = db.abilities
+
+            abilities = self.abilities
+            abilities['season'] = self.season
+            collection.insert(abilities)
+
+            client.close()
+
+    def load_abilities(self, model=1):
+        """
+        Load team abilities from mongoDB
+        :param model: The Dixon Robinson model
+        """
+
+        if self.nba is True:
+            client = MongoClient()
+            db = client.basketball
+            collection = db.abilities
+
+            ab = collection.find_one({'year': self.season, 'model': model})
+
+            if ab is None:
+                print('No parameters found for this model and season.')
+            else:
+                self.abilities = ab
+                client.close()

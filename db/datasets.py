@@ -10,7 +10,7 @@ from db import process_data
 def match_point_times(season=None, month=None):
     """
     Create and return a pandas dataframe for matches that includes the home and away team, and
-    times for points scored (divided by 48 so the times are (0, 1]).
+    times for points scored.
 
     :param month: Calendar Month
     :param season: NBA Season (All stored season selected if None)
