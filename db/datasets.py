@@ -177,34 +177,28 @@ def create_test_set(t, g, margin):
                     match = process_data.select_match(-margin, ids)
 
                 # Store all points by the minute instead of all individually
-                point_dict = {}
+                point_list = []
 
                 home_score = 0
                 for stat in match['home_time']:
                     if 'points' in stat:
-                        time = int(stat['time']) + 1
+                        time = float(stat['time'])
                         if time <= 48:
 
-                            if time not in point_dict:
-                                point_dict[time] = {'home': 0, 'away': 0, 'time': time}
-
-                            point_dict[time]['home'] += stat['points']
+                            stat['home'] = 1
+                            point_list.append(stat)
                             home_score += stat['points']
 
                 away_score = 0
                 for stat in match['away_time']:
                     if 'points' in stat:
-                        time = int(stat['time']) + 1
+                        time = float(stat['time'])
                         if time <= 48:
 
-                            if time not in point_dict:
-                                point_dict[time] = {'home': 0, 'away': 0, 'time': time}
-
-                            point_dict[time]['away'] += stat['points']
+                            stat['home'] = 0
+                            point_list.append(stat)
                             away_score += stat['points']
 
-                # Convert to list to sort by time
-                point_list = [v for v in point_dict.values()]
                 point_list.sort(key=operator.itemgetter('time'))
 
                 game['home_pts'] = home_score

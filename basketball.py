@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.stats import poisson
 from pymongo import MongoClient
-
+from bson.objectid import ObjectId
 from db import datasets
 from db import process_utils
 from models import dixon_robinson as dr
@@ -49,7 +49,7 @@ class Basketball:
 
         # Attack and Defence parameters
         att = np.full((1, self.nteams), 100)
-        defense = np.full((1, self.nteams), 0.5)
+        defense = np.full((1, self.nteams), 1)
         teams = np.append(att, defense)
 
         # Base model only contains the home advantage
@@ -68,7 +68,7 @@ class Basketball:
         elif model == 5:
             params = np.full((1, 7), 1.5)
         else:
-            params = np.full((1, 1), 1)
+            params = np.full((1, 1), 1.5)
 
         return np.append(teams, params)
 
@@ -174,7 +174,7 @@ class Basketball:
             self.abilities['time']['home'] = opt[self.nteams * 2 + 5]
             self.abilities['time']['away'] = opt[self.nteams * 2 + 6]
 
-    def test_model(self, model=0, season=None, month=None):
+    def test_model(self, season=None, month=None):
         """
         Test the optimized model against a testing set
         :param season: NBA Season
@@ -194,22 +194,31 @@ class Basketball:
         predict = 0
         ngames = 0
 
+        bet_total = 0
+        bet_win = 0
+
         for row in test.itertuples():
             hmean = self.abilities[row.home]['att'] * self.abilities[row.away]['def'] * self.abilities['home']
             amean = self.abilities[row.away]['att'] * self.abilities[row.home]['def']
 
             homea, awaya = 0, 0
-            for h in range(1, 150):
-                for a in range(1, 150):
+            for h in range(60, 140):
+                for a in range(60, 140):
 
                     if h > a:
                         homea += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
                     elif h < a:
                         awaya += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
 
-            if hmean >= amean:
+            bet = False
+
+            if homea >= awaya:
+                if float(homea) >= 0.70:
+                    bet = True
                 predicted = row.home
             else:
+                if float(awaya) >= 0.70:
+                    bet = True
                 predicted = row.away
 
             if row.home_pts > row.away_pts:
@@ -218,11 +227,21 @@ class Basketball:
                 winner = row.away
 
             if predicted == winner:
+                if bet is True:
+                    bet_win += 1
                 predict += 1
+
+            if bet is True:
+                bet_total += 1
             ngames += 1
 
-            print("%s: %.4f\t\t%s: %.4f\t\tWinner: %s\t\t%d/%d\t%.4f" % (
-                row.home, homea, row.away, awaya, winner, predict, ngames, (predict / ngames)))
+            try:
+                bet_accuracy = bet_win/bet_total
+            except ZeroDivisionError:
+                bet_accuracy = 0
+
+            print("%s: %.4f\t\t%s: %.4f\t\tWinner: %s\t\t%d/%d\t%.4f\t\tOver 70: %d/%d\t%.4f" % (
+                row.home, homea, row.away, awaya, winner, predict, ngames, (predict / ngames), bet_win, bet_total, bet_accuracy))
 
         print("Prediction Accuracy: %.4f" % (predict / ngames))
 
@@ -242,7 +261,7 @@ class Basketball:
 
             client.close()
 
-    def load_abilities(self, model=1):
+    def load_abilities(self, model=1, id = None):
         """
         Load team abilities from mongoDB
         :param model: The Dixon Robinson model
@@ -253,7 +272,10 @@ class Basketball:
             db = client.basketball
             collection = db.abilities
 
-            ab = collection.find_one({'year': self.season, 'model': model})
+            if id is not None:
+                ab = collection.find_one({'_id': ObjectId(id)})
+            else:
+                ab = collection.find_one({'year': self.season, 'model': model})
 
             if ab is None:
                 print('No parameters found for this model and season.')
