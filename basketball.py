@@ -174,7 +174,7 @@ class Basketball:
             self.abilities['time']['home'] = opt[self.nteams * 2 + 5]
             self.abilities['time']['away'] = opt[self.nteams * 2 + 6]
 
-    def test_model(self, season=None, month=None):
+    def test_model(self, season=None, month=None, display=False):
         """
         Test the optimized model against a testing set
         :param season: NBA Season
@@ -191,7 +191,10 @@ class Basketball:
         else:
             test = datasets.create_test_set(self.nteams, self.ngames, self.nmargin)
 
-        winnings = 0
+        bankroll = 0
+
+        nbets, nwins = 0, 0
+        npredict, ntotal = 0, 0
 
         for row in test.itertuples():
 
@@ -223,26 +226,53 @@ class Basketball:
             if aprob >= abp:
                 abet = True
 
+            # Determine prediction
+            if hprob >= aprob:
+                predict = row.home
+            else:
+                predict = row.away
+
             if row.home_pts > row.away_pts:
                 winner = row.home
 
                 if hbet:
-                    winnings += row.home_bet
+                    bankroll += row.home_bet - 1
+                    nbets += 1
+                    nwins += 1
 
                 if abet:
-                    winnings -= 1
+                    bankroll -= 1
+                    nbets += 1
 
             else:
                 winner = row.away
 
                 if hbet:
-                    winnings -= 1
+                    bankroll -= 1
+                    nbets += 1
 
                 if abet:
-                    winnings += row.away_bet
+                    bankroll += row.away_bet - 1
+                    nbets += 1
+                    nwins += 1
 
-            print("%s: %.4f\t\t%s: %.4f\t\tHome Bet: %s\t\tAway Bet: %s\t\tWinner: %s\t\tWinnings: %.2f" % (
-                row.home, hprob, row.away, aprob, hbet, abet, winner, winnings))
+            if predict == winner:
+                npredict += 1
+
+            ntotal += 1
+
+            if display:
+                print("%s (%.2f): %.4f\t\t%s (%.2f): %.4f" % (row.home, row.home_bet, hprob, row.away, row.away_bet, aprob))
+                print("Home Bet: %s\t\t\tAway Bet: %s\t\t" % (hbet, abet))
+                print("Predicted: %s\t\t\tWinner: %s\t\t\tPercentage: %.4f" % (predict, winner, (npredict/ntotal)))
+                print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (nbets, nwins, (nwins/nbets)))
+                print("Bankroll: %.2f"  % bankroll)
+                print()
+
+        print("Predicted: %d/%d\t\tPercentage: %.4f" % (npredict, ntotal, (npredict / ntotal)))
+        print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (nbets, nwins, (nwins / nbets)))
+        print("Bankroll: %.2f" % bankroll)
+
 
     def store_abilities(self):
         """
