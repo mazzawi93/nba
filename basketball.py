@@ -187,63 +187,62 @@ class Basketball:
             if season is None:
                 season = [2017]
 
-            test = datasets.match_point_times(season, month)
+            test = datasets.match_point_times(season, month, bet=True)
         else:
             test = datasets.create_test_set(self.nteams, self.ngames, self.nmargin)
 
-        predict = 0
-        ngames = 0
-
-        bet_total = 0
-        bet_win = 0
+        winnings = 0
 
         for row in test.itertuples():
+
+            # Bet on respective teams
+            hbet = False
+            abet = False
+
+            # Poisson Means
             hmean = self.abilities[row.home]['att'] * self.abilities[row.away]['def'] * self.abilities['home']
             amean = self.abilities[row.away]['att'] * self.abilities[row.home]['def']
 
-            homea, awaya = 0, 0
+            # Calculate probabilities
+            hprob, aprob = 0, 0
             for h in range(60, 140):
                 for a in range(60, 140):
 
                     if h > a:
-                        homea += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+                        hprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
                     elif h < a:
-                        awaya += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+                        aprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
 
-            bet = False
+            # Implied probability from betting lines (ie. 2.00 line means 50% chance they win)
+            hbp = 1/row.home_bet
+            abp = 1/row.away_bet
 
-            if homea >= awaya:
-                if float(homea) >= 0.70:
-                    bet = True
-                predicted = row.home
-            else:
-                if float(awaya) >= 0.70:
-                    bet = True
-                predicted = row.away
+            # Determine if we should bet on the home and away team
+            if hprob >= hbp:
+                hbet = True
+            if aprob >= abp:
+                abet = True
 
             if row.home_pts > row.away_pts:
                 winner = row.home
+
+                if hbet:
+                    winnings += row.home_bet
+
+                if abet:
+                    winnings -= 1
+
             else:
                 winner = row.away
 
-            if predicted == winner:
-                if bet is True:
-                    bet_win += 1
-                predict += 1
+                if hbet:
+                    winnings -= 1
 
-            if bet is True:
-                bet_total += 1
-            ngames += 1
+                if abet:
+                    winnings += row.away_bet
 
-            try:
-                bet_accuracy = bet_win/bet_total
-            except ZeroDivisionError:
-                bet_accuracy = 0
-
-            print("%s: %.4f\t\t%s: %.4f\t\tWinner: %s\t\t%d/%d\t%.4f\t\tOver 70: %d/%d\t%.4f" % (
-                row.home, homea, row.away, awaya, winner, predict, ngames, (predict / ngames), bet_win, bet_total, bet_accuracy))
-
-        print("Prediction Accuracy: %.4f" % (predict / ngames))
+            print("%s: %.4f\t\t%s: %.4f\t\tHome Bet: %s\t\tAway Bet: %s\t\tWinner: %s\t\tWinnings: %.2f" % (
+                row.home, hprob, row.away, aprob, hbet, abet, winner, winnings))
 
     def store_abilities(self):
         """

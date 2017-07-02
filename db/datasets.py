@@ -7,7 +7,7 @@ from pymongo import MongoClient
 from db import process_data
 
 
-def match_point_times(season=None, month=None):
+def match_point_times(season=None, month=None, bet=False):
     """
     Create and return a pandas dataframe for matches that includes the home and away team, and
     times for points scored.
@@ -30,7 +30,8 @@ def match_point_times(season=None, month=None):
         'home_time.time': 1,
         'away_time.points': 1,
         'away_time.time': 1,
-        'date': 1
+        'date': 1,
+        'bet': 1
     }
 
     match = {}
@@ -112,6 +113,14 @@ def match_point_times(season=None, month=None):
                  'home_pts': home_score,
                  'away_pts': away_score,
                  'time': point_list}
+
+        if bet:
+            try:
+                match['home_bet'] = float(game['bet']['home'])
+                match['away_bet'] = float(game['bet']['away'])
+            except KeyError:
+                match['home_bet'] = 1.0
+                match['away_bet'] = 1.0
 
         matches.append(match)
 
