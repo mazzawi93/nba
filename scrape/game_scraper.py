@@ -6,11 +6,21 @@ from pymongo import MongoClient
 
 
 class GameScraper:
-
     def __init__(self):
 
         # Scrape the NBA Team Names from Basketball Reference
-        self.teams = scrape_utils.team_names()
+        self.teams = ['ATL', 'BOS', 'BRK', 'CHO', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GSW', 'HOU', 'IND', 'LAC', 'LAL',
+                      'MEM', 'MIA', 'MIL', 'MIN', 'NOP', 'NYK', 'OKC', 'ORL', 'PHI', 'PHO', 'POR', 'SAC', 'SAS', 'TOR',
+                      'UTA', 'WAS']
+
+        self.full_teams = ['Atlanta Hawks', 'Boston Celtics', 'Brooklyn Nets', 'Charlotte Hornets', 'Chicago Bulls',
+                           'Cleveland Cavaliers', 'Dallas Mavericks', 'Denver Nuggets', 'Detroit Pistons',
+                           'Golden State Warriors', 'Houston Rockets', 'Indiana Pacers', 'Los Angeles Clippers',
+                           'Los Angeles Lakers', 'Memphis Grizzlies', 'Miami Heat', 'Milwaukee Bucks',
+                           'Minnesota Timberwolves', 'New Orleans Pelicans', 'New York Knicks', 'Oklahoma City Thunder',
+                           'Orlando Magic', 'Philadelphia 76ers', 'Phoenix Suns', 'Portland Trail Blazers',
+                           'Sacramento Kings', 'San Antonio Spurs', 'Toronto Raptors', 'Utah Jazz',
+                           'Washington Wizards']
         self.years = range(2012, 2018)
 
         # MongoDB
@@ -122,8 +132,8 @@ class GameScraper:
                 result['result'] = scrape_utils.determine_home_win(match['game_location'], match['game_result'])
 
                 # If game is not in DB, then scrape time stamps for all stats and store
-                if collection.find_one({'home.team': result['home'], 'away.team': result['away'], 'date': result['date']}) is None:
-
+                if collection.find_one(
+                        {'home.team': result['home'], 'away.team': result['away'], 'date': result['date']}) is None:
                     # Find the URL for a game's play by play stat for the time for each stat
                     pbp = game.find('a')
                     pbp_url = 'http://www.basketball-reference.com/boxscores/pbp' + pbp['href'][-18:]
@@ -175,6 +185,53 @@ class GameScraper:
             # Add to MongoDB
             if collection.find_one(season) is None:
                 collection.insert_one(season)
+
+    def betting_lines(self, year):
+        """
+        Add historical betting lines to the database
+
+        :param year: NBA Season
+        """
+
+        url = "scrape/data/nba_betting_odds_%s.html" % year
+
+        soup = BeautifulSoup(open(url), "html.parser")
+        table = soup.find('tbody')
+
+        # Mongo Collection
+        collection = self.db.game_log
+
+        # Iterate through each game
+        for game in table.find_all('tr'):
+
+            # Date
+            date = datetime.strptime(game.find('td', {'class': 's2'}).text, "%d.%m.%Y")
+
+            # Teams
+            teams = game.find('a')
+
+            # TODO: Get the point spread for a better opportunity to make money
+            url = teams['href']
+
+            # Team indexes in 3-letter code list
+            teams = teams.text.split('-')
+            hi = self.full_teams.index(teams[0][:-1])
+            ai = self.full_teams.index(teams[1][1:])
+
+            home, away = 0, 0
+
+            # Moneylines
+            i = 0
+            for bet in game.find_all('td', {'class': 's1'}):
+                if i == 0:
+                    home = bet.text
+                else:
+                    away = bet.text
+                i += 1
+
+            # Add the betting line to the database
+            collection.update({'home.team': self.teams[hi], 'away.team': self.teams[ai], 'date': date},
+                              {'$set': {'bet.home': home, 'bet.away': away}})
 
     def scrape_all(self):
         """
