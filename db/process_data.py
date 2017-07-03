@@ -33,6 +33,7 @@ def select_match(win_margin, ids):
                 'away_time.time': 1,
                 'home.pts': 1,
                 'away.pts': 1,
+                'bet': 1,
                 'difference': {'$subtract': ['$home.pts', '$away.pts']}
             }},
         {'$match':

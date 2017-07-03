@@ -79,33 +79,26 @@ def match_point_times(season=None, month=None, bet=False):
     for game in games:
 
         # Store all points by the minute instead of all individually
-        point_dict = {}
+        point_list = []
 
         home_score = 0
         for stat in game['home_time']:
             if 'points' in stat:
-                time = int(stat['time']) + 1
+                time = float(stat['time'])
                 if time <= 48:
-
-                    if time not in point_dict:
-                        point_dict[time] = {'home': 0, 'away': 0, 'time': time}
-
-                    point_dict[time]['home'] += stat['points']
+                    stat['home'] = 1
+                    point_list.append(stat)
                     home_score += stat['points']
 
         away_score = 0
         for stat in game['away_time']:
             if 'points' in stat:
-                time = int(stat['time']) + 1
+                time = float(stat['time'])
                 if time <= 48:
-
-                    if time not in point_dict:
-                        point_dict[time] = {'home': 0, 'away': 0, 'time': time}
-
-                    point_dict[time]['away'] += stat['points']
+                    stat['home'] = 0
+                    point_list.append(stat)
                     away_score += stat['points']
 
-        point_list = [v for v in point_dict.values()]
         point_list.sort(key=operator.itemgetter('time'))
 
         match = {'home': game['home']['team'],
@@ -129,7 +122,7 @@ def match_point_times(season=None, month=None, bet=False):
     return result
 
 
-def create_test_set(t, g, margin):
+def create_test_set(t, g, margin, bet=False):
     """
     Create test set based on the number of teams and games played per team.
     Games are taken from the game_log mongodb collection based on the winning
@@ -203,7 +196,6 @@ def create_test_set(t, g, margin):
                     if 'points' in stat:
                         time = float(stat['time'])
                         if time <= 48:
-
                             stat['home'] = 0
                             point_list.append(stat)
                             away_score += stat['points']
@@ -213,6 +205,14 @@ def create_test_set(t, g, margin):
                 game['home_pts'] = home_score
                 game['away_pts'] = away_score
                 game['time'] = point_list
+
+                if bet:
+                    try:
+                        game['home_bet'] = float(match['bet']['home'])
+                        game['away_bet'] = float(match['bet']['away'])
+                    except KeyError:
+                        game['home_bet'] = 1.0
+                        game['away_bet'] = 1.0
 
                 # Append the id to the list so that the match doesn't get selected again
                 ids.append(match['_id'])

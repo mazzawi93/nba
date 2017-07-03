@@ -6,6 +6,7 @@ from bson.objectid import ObjectId
 from db import datasets
 from db import process_utils
 from models import dixon_robinson as dr
+import matplotlib.pyplot as plt
 
 
 class Basketball:
@@ -86,7 +87,7 @@ class Basketball:
         nba = nba.drop('time', axis=1)
 
         # Minimize Constraint
-        con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (self.nteams,)}
+        con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
 
         # Minimize the likelihood function
         self.opt = minimize(dr.dixon_coles, x0=ab, args=(nba, self.teams), constraints=con)
@@ -103,13 +104,40 @@ class Basketball:
         ab = self.initial_guess(model)
 
         # Minimize Constraint
-        con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (self.nteams,)}
+        con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
 
         # Minimize the likelihood function
         self.opt = minimize(dr.dixon_robinson, x0=ab, args=(self.dataset, self.teams, model),
                             constraints=con)
 
         self.ab(self.opt.x, model)
+
+    def time_visualisation(self):
+
+        points = np.zeros(49)
+
+        for row in self.dataset.itertuples():
+
+            for point in row.time:
+
+
+                time = int(point['time']+1)
+
+                if time == 49:
+                    time -= 1
+
+                points[time] += point['points']
+
+        print(points)
+        plt.figure()
+        plt.plot(points, markersize=1)
+        plt.ylabel('Points')
+        plt.xlabel('Minute')
+        plt.title('NBA Point Distribution')
+
+        for i in range(1, 5):
+            plt.axvline(x=(i * 12) - 1, linestyle='--', color='red', lw=0.5)
+            plt.axvline(x=(i * 12), linestyle='--', color='red', lw=0.5)
 
     def ab(self, opt, model=1):
         """
@@ -189,7 +217,7 @@ class Basketball:
 
             test = datasets.match_point_times(season, month, bet=True)
         else:
-            test = datasets.create_test_set(self.nteams, self.ngames, self.nmargin)
+            test = datasets.create_test_set(self.nteams, self.ngames, self.nmargin, bet=True)
 
         bankroll = 0
 
@@ -217,8 +245,8 @@ class Basketball:
                         aprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
 
             # Implied probability from betting lines (ie. 2.00 line means 50% chance they win)
-            hbp = 1/row.home_bet
-            abp = 1/row.away_bet
+            hbp = 1 / row.home_bet
+            abp = 1 / row.away_bet
 
             # Determine if we should bet on the home and away team
             if hprob >= hbp:
@@ -262,17 +290,24 @@ class Basketball:
             ntotal += 1
 
             if display:
-                print("%s (%.2f): %.4f\t\t%s (%.2f): %.4f" % (row.home, row.home_bet, hprob, row.away, row.away_bet, aprob))
+                print("%s (%.2f): %.4f\t\t%s (%.2f): %.4f" % (
+                    row.home, row.home_bet, hprob, row.away, row.away_bet, aprob))
                 print("Home Bet: %s\t\t\tAway Bet: %s\t\t" % (hbet, abet))
-                print("Predicted: %s\t\t\tWinner: %s\t\t\tPercentage: %.4f" % (predict, winner, (npredict/ntotal)))
-                print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (nbets, nwins, (nwins/nbets)))
-                print("Bankroll: %.2f"  % bankroll)
+                print("Predicted: %s\t\t\tWinner: %s\t\t\tPredictions: %d/%d\t\tPercentage: %.4f" % (
+                    predict, winner, npredict, ntotal, (npredict / ntotal)))
+                try:
+                    print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (nbets, nwins, (nwins / nbets)))
+                except ZeroDivisionError:
+                    print("No Bets")
+                print("Bankroll: %.2f" % bankroll)
                 print()
 
         print("Predicted: %d/%d\t\tPercentage: %.4f" % (npredict, ntotal, (npredict / ntotal)))
-        print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (nbets, nwins, (nwins / nbets)))
+        try:
+            print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (nbets, nwins, (nwins / nbets)))
+        except ZeroDivisionError:
+            print("No Bets")
         print("Bankroll: %.2f" % bankroll)
-
 
     def store_abilities(self):
         """
@@ -290,7 +325,7 @@ class Basketball:
 
             client.close()
 
-    def load_abilities(self, model=1, id = None):
+    def load_abilities(self, model=1, id=None):
         """
         Load team abilities from mongoDB
         :param model: The Dixon Robinson model

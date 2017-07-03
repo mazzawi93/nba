@@ -3,7 +3,7 @@ import numpy as np
 import time
 
 
-def attack_constraint(params, nteams):
+def attack_constraint(params, constraint, nteams):
     """
     Attack parameter constraint for the likelihood functions
     The Mean of the attack parameters must equal 100
@@ -13,9 +13,9 @@ def attack_constraint(params, nteams):
     :return: The mean of the attack - 100
     """
 
-    return sum(params[:nteams]) / nteams - 100
+    return sum(params[:nteams]) / nteams - constraint
 
-def defense_constraint(params, nteams):
+def defense_constraint(params,constraint, nteams):
     """
     Attack parameter constraint for the likelihood functions
     The Mean of the attack parameters must equal 100
@@ -25,7 +25,7 @@ def defense_constraint(params, nteams):
     :return: The mean of the attack - 100
     """
 
-    return sum(params[nteams:nteams*2]) / nteams - 1
+    return sum(params[nteams:nteams*2]) / nteams - constraint
 
 
 def dixon_coles(params, games, teams):
@@ -136,7 +136,7 @@ def dixon_robinson(params, games, teams, model):
 
                     quarter += 1
 
-            # If the home team scored add
+            # If the home team scored
             if home == 1:
 
                 # Add to current score
@@ -194,8 +194,10 @@ def dixon_robinson(params, games, teams, model):
                 # Add to log likelihood
                 match_like += poisson.logpmf(ap, mean)
 
+        hmean = params[h] * params[a+num] * params[num * 2]
+        amean = params[h + num] * params[a]
+
         # Total Log Likelihood
-        total += match_like - poisson.logpmf(hp, (params[h] * params[a + num] * params[num * 2])) - poisson.logpmf(
-         ap, (params[h + num] * params[a]))
+        total += match_like - poisson.logpmf(hp, hmean) - poisson.logpmf(ap, amean)
 
     return -total
