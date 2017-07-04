@@ -120,8 +120,7 @@ class Basketball:
 
             for point in row.time:
 
-
-                time = int(point['time']+1)
+                time = int(point['time'] + 1)
 
                 if time == 49:
                     time -= 1

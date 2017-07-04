@@ -99,6 +99,7 @@ def dixon_robinson(params, games, teams, model):
         check = range(4, 52, 4)
 
         quarter = 1
+        run = 1
 
         # Match likelihood
         match_like = 0
@@ -162,7 +163,7 @@ def dixon_robinson(params, games, teams, model):
 
                 # Poisson mean
                 mean = params[h] * params[a + num] * params[num * 2] * time_param * run
-                match_like += poisson.logpmf(hp, mean)
+                match_like += (poisson.logpmf(row.home_pts, mean)) * score
 
             # Away Team scored
             else:
@@ -192,12 +193,17 @@ def dixon_robinson(params, games, teams, model):
                 mean = params[h + num] * params[a] * time_param * run
 
                 # Add to log likelihood
-                match_like += poisson.logpmf(ap, mean)
+                match_like += (poisson.logpmf(row.away_pts, mean)) * score
 
-        hmean = params[h] * params[a+num] * params[num * 2]
-        amean = params[h + num] * params[a]
+        if model >= 2:
+            time_param = params[num*2 + 4]
+        else:
+            time_param = 1
+
+        hmean = params[h] * params[a+num] * params[num * 2] * time_param * run
+        amean = params[h + num] * params[a] * time_param * run
 
         # Total Log Likelihood
-        total += match_like - poisson.logpmf(hp, hmean) - poisson.logpmf(ap, amean)
+        total += match_like - poisson.logpmf(row.home_pts, hmean) - poisson.logpmf(row.away_pts, amean)
 
     return -total
