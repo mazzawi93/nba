@@ -224,9 +224,9 @@ class GameScraper:
             i = 0
             for bet in game.find_all('td', {'class': 's1'}):
                 if i == 0:
-                    home = bet.text
+                    home = round(float(bet.text), 2)
                 else:
-                    away = bet.text
+                    away = round(float(bet.text), 2)
                 i += 1
 
             # Add the betting line to the database

@@ -1,157 +1,58 @@
-import numpy as np
+from bson.objectid import ObjectId
+from pymongo import MongoClient
 from scipy.optimize import minimize
 from scipy.stats import poisson
-from pymongo import MongoClient
-from bson.objectid import ObjectId
+
 from db import datasets
 from db import process_utils
 from models import dixon_robinson as dr
-import matplotlib.pyplot as plt
 
 
 class Basketball:
-    def __init__(self, nba, nteams=4, ngames=4, nmargin=10, season=None, month=None, point_times=True):
+    def __init__(self, model, season=None, month=None, load=False, _id=None):
 
         if season is None:
             season = 2016
 
-        self.opt = None
-        self.nba = nba
-        self.abilities = None
-
-        if nba is True:
-
-            self.dataset = datasets.game_scores(season=season, month=month, point_times=point_times)
-            self.teams = process_utils.name_teams(True)
-            self.nteams = 30
-            self.season = season
-            self.month = month
-
+        # Dixon Coles dataset is different
+        if model == 0:
+            self.dataset = datasets.dc_dataframe(season, month, False)
         else:
+            self.dataset = datasets.game_scores(season=season, month=month)
 
-            if nteams < 2:
-                raise ValueError('There must be at least two teams.')
+        # Dataset information
+        self.teams = process_utils.name_teams(True)
+        self.nteams = 30
+        self.season = season
 
-            if ngames % 2 != 0:
-                raise ValueError('The number of games must be even so there is equal home and away.')
-
-            self.dataset = datasets.create_test_set(nteams, ngames, nmargin)
-            self.teams = process_utils.name_teams(False, nteams)
-            self.nteams = nteams
-            self.ngames = ngames
-            self.nmargin = nmargin
-
-    def initial_guess(self, model=1):
-        """
-        Create an initial guess for the minimization function
-        :param model: The model implemented (1 = Base model (Att, Def, Home), 2 = Time Parameters, 3 = winning/losing)
-        :return: Numpy array of team abilities (Attack, Defense) and Home Advantage and other factors
-        """
-
-        # Attack and Defence parameters
-        att = np.full((1, self.nteams), 100)
-        defense = np.full((1, self.nteams), 1)
-        teams = np.append(att, defense)
-
-        # Base model only contains the home advantage
-        if model == 1:
-            params = np.full((1, 1), 1.5)
-        # The time parameters are added to the model
-        elif model == 2:
-            params = np.full((1, 5), 1.5)
-        # Model is extended by adding scoreline parameters if a team is winning
-        elif model == 3:
-            params = np.full((1, 9), 1.5)
-        # Extend model with larger winning margins
-        elif model == 4:
-            params = np.full((1, 17), 1.5)
-        # Time Rates
-        elif model == 5:
-            params = np.full((1, 7), 1.5)
+        if load:
+            self.load_abilities(_id)
         else:
-            params = np.full((1, 1), 1.5)
+            self.abilities = {'model': model}
 
-        return np.append(teams, params)
+            # Initial Guess for the minimization
+            a0 = dr.initial_guess(model, self.nteams)
 
-    def dixon_coles(self):
+            # Minimize Constraint
+            con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
+
+            # Minimize the likelihood function
+            if model == 0:
+                self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams), constraints=con)
+            else:
+                self.opt = minimize(dr.dixon_robinson, x0=a0, args=(self.dataset, self.teams, model),
+                                    constraints=con)
+
+            # Scipy minization requires a numpy array for all abilities, so convert them to readable dict
+            self.convert_abilities(self.opt.x, model)
+
+    def convert_abilities(self, opt, model):
         """
-        Apply the dixon coles model to an NBA season to find the attack and defense parameters for each team
-        as well as the home court advantage
-        """
-
-        # Initial Guess for the minimization
-        ab = self.initial_guess()
-
-        # Game Data without time
-        nba = self.dataset
-
-        try:
-            nba = nba.drop('time', axis=1)
-        except ValueError:
-            pass
-
-        # Minimize Constraint
-        con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
-
-        # Minimize the likelihood function
-        self.opt = minimize(dr.dixon_coles, x0=ab, args=(nba, self.teams), constraints=con)
-
-        self.ab(self.opt.x)
-
-    def dixon_robinson(self, model=1):
-        """
-        Dixon-Robinson implementation
-        :param model: The model number (0 = no time or scoreline parameters)
-        """
-
-        # Initial Guess for the minimization
-        ab = self.initial_guess(model)
-
-        # Minimize Constraint
-        con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
-
-        # Minimize the likelihood function
-        self.opt = minimize(dr.dixon_robinson, x0=ab, args=(self.dataset, self.teams, model),
-                            constraints=con)
-
-        self.ab(self.opt.x, model)
-
-    def time_visualisation(self):
-
-        points = np.zeros(49)
-
-        for row in self.dataset.itertuples():
-
-            for point in row.time:
-
-                time = int(point['time'] + 1)
-
-                if time == 49:
-                    time -= 1
-
-                points[time] += point['points']
-
-        print(points)
-        plt.figure()
-        plt.plot(points, markersize=1)
-        plt.ylabel('Points')
-        plt.xlabel('Minute')
-        plt.title('NBA Point Distribution')
-
-        for i in range(1, 5):
-            plt.axvline(x=(i * 12) - 1, linestyle='--', color='red', lw=0.5)
-            plt.axvline(x=(i * 12), linestyle='--', color='red', lw=0.5)
-
-    def ab(self, opt, model=1):
-        """
-        Convert the abilities numpy array into a more usable dict
+        Convert the numpy abilities array into a more usable dict
         :param opt: Abilities from optimization
         :param model: Model number determines which parameters are included
         """
 
-        self.abilities = {
-            'model': model
-        }
         i = 0
 
         # Attack and defense
@@ -214,13 +115,13 @@ class Basketball:
 
         # If it is nba data we are working with get current season, else create a testing set with the same
         # parameters as the training set
-        if self.nba is True:
-            if season is None:
+        if season is None:
                 season = [2017]
 
-            test = datasets.game_scores(season, month, bet=True)
+        if self.abilities['model'] == 0:
+            test = datasets.dc_dataframe(season, month, bet=True)
         else:
-            test = datasets.create_test_set(self.nteams, self.ngames, self.nmargin, bet=True)
+            test = datasets.game_scores(season, month, bet=True)
 
         bankroll = 0
 
@@ -248,8 +149,8 @@ class Basketball:
                         aprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
 
             # Implied probability from betting lines (ie. 2.00 line means 50% chance they win)
-            hbp = 1 / row.home_bet
-            abp = 1 / row.away_bet
+            hbp = 1 / row.hbet
+            abp = 1 / row.abet
 
             # Determine if we should bet on the home and away team
             if float(hprob) >= hbp:
@@ -263,11 +164,11 @@ class Basketball:
             else:
                 predict = row.away
 
-            if row.home_pts > row.away_pts:
+            if row.hpts > row.apts:
                 winner = row.home
 
                 if hbet:
-                    bankroll += row.home_bet - 1
+                    bankroll += row.hbet - 1
                     nbets += 1
                     nwins += 1
 
@@ -283,7 +184,7 @@ class Basketball:
                     nbets += 1
 
                 if abet:
-                    bankroll += row.away_bet - 1
+                    bankroll += row.abet - 1
                     nbets += 1
                     nwins += 1
 
@@ -294,7 +195,7 @@ class Basketball:
 
             if display:
                 print("%s (%.2f): %.4f\t\t%s (%.2f): %.4f" % (
-                    row.home, row.home_bet, hprob, row.away, row.away_bet, aprob))
+                    row.home, row.hbet, hprob, row.away, row.abet, aprob))
                 print("Home Bet: %s\t\t\tAway Bet: %s\t\t" % (hbet, abet))
                 print("Predicted: %s\t\t\tWinner: %s\t\t\tPredictions: %d/%d\t\tPercentage: %.4f" % (
                     predict, winner, npredict, ntotal, (npredict / ntotal)))
@@ -317,35 +218,27 @@ class Basketball:
         Store team abilities in MongoDB
         """
 
-        if self.nba is True:
-            client = MongoClient()
-            db = client.basketball
-            collection = db.abilities
+        client = MongoClient()
+        db = client.basketball
+        collection = db.abilities
 
-            abilities = self.abilities
-            abilities['season'] = self.season
-            collection.insert(abilities)
+        abilities = self.abilities
+        abilities['season'] = self.season
+        collection.insert(abilities)
 
-            client.close()
+        client.close()
 
-    def load_abilities(self, model=1, id=None):
+    def load_abilities(self, _id):
         """
         Load team abilities from mongoDB
-        :param model: The Dixon Robinson model
+        :param _id: MongoDB id
         """
 
-        if self.nba is True:
-            client = MongoClient()
-            db = client.basketball
-            collection = db.abilities
+        client = MongoClient()
+        db = client.basketball
+        collection = db.abilities
 
-            if id is not None:
-                ab = collection.find_one({'_id': ObjectId(id)})
-            else:
-                ab = collection.find_one({'year': self.season, 'model': model})
+        ab = collection.find_one({'_id': ObjectId(_id)})
 
-            if ab is None:
-                print('No parameters found for this model and season.')
-            else:
-                self.abilities = ab
-                client.close()
+        self.abilities = ab
+        client.close()

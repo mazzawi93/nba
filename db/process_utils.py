@@ -5,7 +5,40 @@ teams = ['ATL', 'BOS', 'BRK', 'CHO', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GSW', '
          'MIL', 'MIN', 'NOP', 'NYK', 'OKC', 'ORL', 'PHI', 'PHO', 'POR', 'SAC', 'SAS', 'TOR', 'UTA', 'WAS']
 
 
-def season_check(season):
+def season_check(season, fields, match):
+    if season is not None:
+
+        # Convert season to list because aggregation uses $in
+        if isinstance(season, int):
+            season = [season]
+
+        # Raise error if incorrect type was given
+        if not isinstance(season, list):
+            raise TypeError("Season must be a list for query purposes")
+        else:
+            # Raise error if year value is incorrect
+            for year in season:
+                if year < 2013 or year > 2017:
+                    raise ValueError("Years must be within the range 2013-2017")
+
+            # Add season for aggregation query
+            fields['season'] = 1
+            match['season'] = {'$in': season}
+
+
+def month_check(month, fields, match):
+    if month is not None:
+        if isinstance(month, int):
+            month = [month]
+
+        if not isinstance(month, list):
+            raise TypeError("Incorrect type entered for month (int or list)")
+
+        fields['month'] = {'$month': '$date'}
+        match['month'] = {'$in': month}
+
+
+def season_check2(season):
     """
     Helper function to determine if season is correctly entered
     :param season: List of seasons or None

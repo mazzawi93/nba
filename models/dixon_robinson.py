@@ -1,6 +1,5 @@
-from scipy.stats import poisson
 import numpy as np
-import time
+from scipy.stats import poisson
 
 
 def attack_constraint(params, constraint, nteams):
@@ -8,6 +7,7 @@ def attack_constraint(params, constraint, nteams):
     Attack parameter constraint for the likelihood functions
     The Mean of the attack parameters must equal 100
 
+    :param constraint: The mean for attack
     :param params: Team Parameters (Attack, Defense and Home Rating)
     :param nteams: The number of teams
     :return: The mean of the attack - 100
@@ -15,17 +15,53 @@ def attack_constraint(params, constraint, nteams):
 
     return sum(params[:nteams]) / nteams - constraint
 
-def defense_constraint(params,constraint, nteams):
+
+def defense_constraint(params, constraint, nteams):
     """
     Attack parameter constraint for the likelihood functions
     The Mean of the attack parameters must equal 100
 
+    :param constraint: Mean for defense
     :param params: Team Parameters (Attack, Defense and Home Rating)
     :param nteams: The number of teams
     :return: The mean of the attack - 100
     """
 
-    return sum(params[nteams:nteams*2]) / nteams - constraint
+    return sum(params[nteams:nteams * 2]) / nteams - constraint
+
+
+def initial_guess(model, nteams):
+    """
+    Create an initial guess for the minimization function
+    :param model: The model implemented (0: DC, 1: Base DR model, 2: Time Parameters, 3: winning/losing)
+    :param nteams: The number of teams
+    :return: Numpy array of team abilities (Attack, Defense) and Home Advantage and other factors
+    """
+
+    # Attack and Defence parameters
+    att = np.full((1, nteams), 100)
+    defense = np.full((1, nteams), 1)
+    teams = np.append(att, defense)
+
+    # Base model only contains the home advantage
+    if model == 1:
+        params = np.full((1, 1), 1.5)
+    # The time parameters are added to the model
+    elif model == 2:
+        params = np.full((1, 5), 1.5)
+    # Model is extended by adding scoreline parameters if a team is winning
+    elif model == 3:
+        params = np.full((1, 9), 1.5)
+    # Extend model with larger winning margins
+    elif model == 4:
+        params = np.full((1, 17), 1.5)
+    # Time Rates
+    elif model == 5:
+        params = np.full((1, 7), 1.5)
+    else:
+        params = np.full((1, 1), 1.5)
+
+    return np.append(teams, params)
 
 
 def dixon_coles(params, games, teams):
@@ -45,6 +81,7 @@ def dixon_coles(params, games, teams):
 
     # Iterate through each game
     for row in games.itertuples():
+
         # Team indexes
         h = teams.index(row.home)
         a = teams.index(row.away)
@@ -54,7 +91,7 @@ def dixon_coles(params, games, teams):
         amean = params[h + num] * params[a]
 
         # Log Likelihood
-        total += poisson.logpmf(row.home_pts, hmean) + poisson.logpmf(row.away_pts, amean)
+        total += poisson.logpmf(row.hpts, hmean) + poisson.logpmf(row.apts, amean)
 
     return -total
 
@@ -196,11 +233,11 @@ def dixon_robinson(params, games, teams, model):
                 match_like += (poisson.logpmf(row.away_pts, mean)) * score
 
         if model >= 2:
-            time_param = params[num*2 + 4]
+            time_param = params[num * 2 + 4]
         else:
             time_param = 1
 
-        hmean = params[h] * params[a+num] * params[num * 2] * time_param * run
+        hmean = params[h] * params[a + num] * params[num * 2] * time_param * run
         amean = params[h + num] * params[a] * time_param * run
 
         # Total Log Likelihood

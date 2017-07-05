@@ -5,9 +5,60 @@ import pandas as pd
 from pymongo import MongoClient
 
 from db import process_data
+from db import process_utils
 
 
-def game_scores(season=None, month=None, bet=False, point_times=True):
+def dc_dataframe(season=None, month=None, bet=False):
+    """
+    Create a Pandas DataFrame for the Dixon and Coles model that uses final scores only.
+    Can specify the NBA season, month and if betting information should be included.
+
+    :param season: NBA Season
+    :param month: Calendar Month
+    :param bet: Betting Lines
+    :return: Pandas DataFrame
+    """
+
+    # MongoDB
+    client = MongoClient()
+    db = client.basketball
+    collection = db.game_log
+
+    fields = {
+        'home': '$home.team',
+        'away': '$away.team',
+        'hpts': '$home.pts',
+        'apts': '$away.pts',
+        'date': 1
+    }
+
+    match = {}
+
+    process_utils.season_check(season, fields, match)
+    process_utils.month_check(month, fields, match)
+
+    if bet:
+        fields['hbet'] = '$bet.home'
+        fields['abet'] = '$bet.away'
+
+    pipeline = [
+        {'$project': fields},
+        {'$match': match},
+        {'$sort': {'date': 1}}
+    ]
+
+    games = collection.aggregate(pipeline, allowDiskUse=True)
+
+    df = pd.DataFrame(list(games))
+
+    # Remove unnecessary information
+    del df['_id']
+    del df['season']
+
+    return df
+
+
+def game_scores(season=None, month=None, bet=False, point_times=True, weeks=False, test=False):
     """
     Create and return a pandas dataframe for matches that includes the home and away team, and
     times for points scored.
@@ -39,34 +90,8 @@ def game_scores(season=None, month=None, bet=False, point_times=True):
     match = {}
 
     # Prepare season value
-    if season is not None:
-
-        # Convert season to list because aggregation uses $in
-        if isinstance(season, int):
-            season = [season]
-
-        # Raise error if incorrect type was given
-        if not isinstance(season, list):
-            raise TypeError("Season must be a list for query purposes")
-        else:
-            # Raise error if year value is incorrect
-            for year in season:
-                if year < 2012 or year > 2017:
-                    raise ValueError("Years must be within the range 2012-2017")
-
-            # Add season for aggregation query
-            fields['season'] = 1
-            match['season'] = {'$in': season}
-
-    if month is not None:
-        if isinstance(month, int):
-            month = [month]
-
-        if not isinstance(month, list):
-            raise TypeError("Incorrect type entered for month (int or list)")
-
-        fields['month'] = {'$month': '$date'}
-        match['month'] = {'$in': month}
+    process_utils.season_check(season, fields, match)
+    process_utils.month_check(month, fields, match)
 
     pipeline = [
         {'$project': fields},
@@ -77,6 +102,9 @@ def game_scores(season=None, month=None, bet=False, point_times=True):
     games = collection.aggregate(pipeline, allowDiskUse=True)
 
     matches = []
+
+    if weeks:
+        week = 0
 
     for game in games:
 
@@ -147,6 +175,9 @@ def create_test_set(t, g, margin, bet=False, point_times=True):
     :param margin: The winning margin
     :return: Pandas Dataframe containing data (Points per team (total and time stamps))
     """
+
+    if t < 2:
+        raise ValueError('There must be at least two teams.')
 
     # G must be even so that there is an equal number of home and away games
     if g % 2 != 0:
