@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 
 class Basketball:
-    def __init__(self, nba, nteams=4, ngames=4, nmargin=10, season=None, month=None):
+    def __init__(self, nba, nteams=4, ngames=4, nmargin=10, season=None, month=None, point_times=True):
 
         if season is None:
             season = 2016
@@ -21,7 +21,7 @@ class Basketball:
 
         if nba is True:
 
-            self.dataset = datasets.match_point_times(season=season, month=month)
+            self.dataset = datasets.game_scores(season=season, month=month, point_times=point_times)
             self.teams = process_utils.name_teams(True)
             self.nteams = 30
             self.season = season
@@ -84,7 +84,11 @@ class Basketball:
 
         # Game Data without time
         nba = self.dataset
-        nba = nba.drop('time', axis=1)
+
+        try:
+            nba = nba.drop('time', axis=1)
+        except ValueError:
+            pass
 
         # Minimize Constraint
         con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
@@ -214,7 +218,7 @@ class Basketball:
             if season is None:
                 season = [2017]
 
-            test = datasets.match_point_times(season, month, bet=True)
+            test = datasets.game_scores(season, month, bet=True)
         else:
             test = datasets.create_test_set(self.nteams, self.ngames, self.nmargin, bet=True)
 
@@ -248,9 +252,9 @@ class Basketball:
             abp = 1 / row.away_bet
 
             # Determine if we should bet on the home and away team
-            if hprob >= hbp:
+            if float(hprob) >= hbp:
                 hbet = True
-            if aprob >= abp:
+            if float(aprob) >= abp:
                 abet = True
 
             # Determine prediction

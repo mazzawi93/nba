@@ -7,7 +7,7 @@ from pymongo import MongoClient
 from db import process_data
 
 
-def match_point_times(season=None, month=None, bet=False):
+def game_scores(season=None, month=None, bet=False, point_times=True):
     """
     Create and return a pandas dataframe for matches that includes the home and away team, and
     times for points scored.
@@ -26,6 +26,8 @@ def match_point_times(season=None, month=None, bet=False):
     fields = {
         'home.team': 1,
         'away.team': 1,
+        'home.pts': 1,
+        'away.pts': 1,
         'home_time.points': 1,
         'home_time.time': 1,
         'away_time.points': 1,
@@ -78,35 +80,44 @@ def match_point_times(season=None, month=None, bet=False):
 
     for game in games:
 
-        # Store all points by the minute instead of all individually
-        point_list = []
+        # Add the time for each point if wanted
+        if point_times:
 
-        home_score = 0
-        for stat in game['home_time']:
-            if 'points' in stat:
-                time = float(stat['time'])
-                if time <= 48:
-                    stat['home'] = 1
-                    point_list.append(stat)
-                    home_score += stat['points']
+            point_list = []
 
-        away_score = 0
-        for stat in game['away_time']:
-            if 'points' in stat:
-                time = float(stat['time'])
-                if time <= 48:
-                    stat['home'] = 0
-                    point_list.append(stat)
-                    away_score += stat['points']
+            home_score = 0
+            for stat in game['home_time']:
+                if 'points' in stat:
+                    time = float(stat['time'])
+                    if time <= 48:
+                        stat['home'] = 1
+                        point_list.append(stat)
+                        home_score += stat['points']
 
-        point_list.sort(key=operator.itemgetter('time'))
+            away_score = 0
+            for stat in game['away_time']:
+                if 'points' in stat:
+                    time = float(stat['time'])
+                    if time <= 48:
+                        stat['home'] = 0
+                        point_list.append(stat)
+                        away_score += stat['points']
 
-        match = {'home': game['home']['team'],
-                 'away': game['away']['team'],
-                 'home_pts': home_score,
-                 'away_pts': away_score,
-                 'time': point_list}
+            point_list.sort(key=operator.itemgetter('time'))
 
+            match = {'home': game['home']['team'],
+                     'away': game['away']['team'],
+                     'home_pts': home_score,
+                     'away_pts': away_score,
+                     'time': point_list}
+        else:
+
+            match = {'home': game['home']['team'],
+                     'away': game['away']['team'],
+                     'home_pts': game['home']['pts'],
+                     'away_pts': game['away']['pts']}
+
+        # Add betting lines
         if bet:
             try:
                 match['home_bet'] = float(game['bet']['home'])
@@ -122,7 +133,7 @@ def match_point_times(season=None, month=None, bet=False):
     return result
 
 
-def create_test_set(t, g, margin, bet=False):
+def create_test_set(t, g, margin, bet=False, point_times=True):
     """
     Create test set based on the number of teams and games played per team.
     Games are taken from the game_log mongodb collection based on the winning
@@ -178,33 +189,36 @@ def create_test_set(t, g, margin, bet=False):
                     game['away'] = team
                     match = process_data.select_match(-margin, ids)
 
-                # Store all points by the minute instead of all individually
-                point_list = []
+                if point_times:
 
-                home_score = 0
-                for stat in match['home_time']:
-                    if 'points' in stat:
-                        time = float(stat['time'])
-                        if time <= 48:
+                    point_list = []
 
-                            stat['home'] = 1
-                            point_list.append(stat)
-                            home_score += stat['points']
+                    home_score = 0
+                    for stat in match['home_time']:
+                        if 'points' in stat:
+                            time = float(stat['time'])
+                            if time <= 48:
+                                stat['home'] = 1
+                                point_list.append(stat)
+                                home_score += stat['points']
 
-                away_score = 0
-                for stat in match['away_time']:
-                    if 'points' in stat:
-                        time = float(stat['time'])
-                        if time <= 48:
-                            stat['home'] = 0
-                            point_list.append(stat)
-                            away_score += stat['points']
+                    away_score = 0
+                    for stat in match['away_time']:
+                        if 'points' in stat:
+                            time = float(stat['time'])
+                            if time <= 48:
+                                stat['home'] = 0
+                                point_list.append(stat)
+                                away_score += stat['points']
 
-                point_list.sort(key=operator.itemgetter('time'))
+                    point_list.sort(key=operator.itemgetter('time'))
 
-                game['home_pts'] = home_score
-                game['away_pts'] = away_score
-                game['time'] = point_list
+                    game['time'] = point_list
+                    game['home_pts'] = home_score
+                    game['away_pts'] = away_score
+                else:
+                    game['home_pts'] = match['home']['pts']
+                    game['away_pts'] = match['away']['pts']
 
                 if bet:
                     try:
