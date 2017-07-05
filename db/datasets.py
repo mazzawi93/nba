@@ -1,6 +1,7 @@
 import operator
 import string
 from random import shuffle
+
 import pandas as pd
 from pymongo import MongoClient
 
@@ -29,7 +30,8 @@ def dc_dataframe(season=None, month=None, bet=False):
         'away': '$away.team',
         'hpts': '$home.pts',
         'apts': '$away.pts',
-        'date': 1
+        'week': {'$add': [{'$week': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2012]}, 52]}]},
+        'date': 1,
     }
 
     match = {}
@@ -54,6 +56,7 @@ def dc_dataframe(season=None, month=None, bet=False):
     # Remove unnecessary information
     del df['_id']
     del df['season']
+    del df['date']
 
     return df
 
