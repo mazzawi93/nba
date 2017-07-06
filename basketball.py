@@ -2,7 +2,7 @@ from bson.objectid import ObjectId
 from pymongo import MongoClient
 from scipy.optimize import minimize
 from scipy.stats import poisson
-
+import numpy as np
 from db import datasets
 from db import process_utils
 from models import dixon_robinson as dr
@@ -28,7 +28,6 @@ class Basketball:
         if load:
             self.load_abilities(_id)
         else:
-            self.abilities = {'model': model}
 
             # Initial Guess for the minimization
             a0 = dr.initial_guess(model, self.nteams)
@@ -38,13 +37,56 @@ class Basketball:
 
             # Minimize the likelihood function
             if model == 0:
-                self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams), constraints=con)
+                self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams, self.dataset.week.max()),
+                                    constraints=con)
             else:
                 self.opt = minimize(dr.dixon_robinson, x0=a0, args=(self.dataset, self.teams, model),
                                     constraints=con)
 
             # Scipy minization requires a numpy array for all abilities, so convert them to readable dict
-            self.convert_abilities(self.opt.x, model)
+            self.abilities = self.convert_abilities(self.opt.x, model)
+
+    def find_time_param(self):
+
+        time = np.arange(0, 0.025, 0.005)
+
+        # Initial Guess for the minimization
+        a0 = dr.initial_guess(0, self.nteams)
+
+        # Minimize Constraint
+        con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
+
+        s = np.zeros(5)
+        ab = []
+        i = 0
+        for t in time:
+            # Minimize the likelihood function
+            opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams, self.dataset.week.max(), t),
+                           constraints=con)
+
+            abilities = self.convert_abilities(opt.x, 0)
+            ab.append(abilities)
+
+            for row in self.dataset.itertuples():
+                # Poisson Means
+                hmean = abilities[row.home]['att'] * abilities[row.away]['def'] * abilities['home']
+                amean = abilities[row.away]['att'] * abilities[row.home]['def']
+
+                # Calculate probabilities
+                prob = 0
+                for h in range(60, 140):
+                    for a in range(60, 140):
+
+                        if h > a and row.hpts > row.apts:
+                            prob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+                        elif h < a and row.hpts < row.apts:
+                            prob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+
+                s[i] += np.log(prob)
+
+            i += 1
+
+        return ab, s
 
     def convert_abilities(self, opt, model):
         """
@@ -52,23 +94,24 @@ class Basketball:
         :param opt: Abilities from optimization
         :param model: Model number determines which parameters are included
         """
+        abilities = {'model': model}
 
         i = 0
 
         # Attack and defense
         for team in self.teams:
-            self.abilities[team] = {
+            abilities[team] = {
                 'att': opt[i],
                 'def': opt[i + self.nteams]
             }
             i += 1
 
         # Home Advantage
-        self.abilities['home'] = opt[self.nteams * 2]
+        abilities['home'] = opt[self.nteams * 2]
 
         # Time parameters
         if model >= 2:
-            self.abilities['time'] = {
+            abilities['time'] = {
                 'q1': opt[self.nteams * 2 + 1],
                 'q2': opt[self.nteams * 2 + 2],
                 'q3': opt[self.nteams * 2 + 3],
@@ -76,16 +119,16 @@ class Basketball:
             }
 
         if model == 3:
-            self.abilities['lambda'] = {
+            abilities['lambda'] = {
                 '+1': opt[self.nteams * 2 + 5],
                 '-1': opt[self.nteams * 2 + 6],
             }
-            self.abilities['mu'] = {
+            abilities['mu'] = {
                 '+1': opt[self.nteams * 2 + 7],
                 '-1': opt[self.nteams * 2 + 8]
             }
         elif model == 4:
-            self.abilities['lambda'] = {
+            abilities['lambda'] = {
                 '+1': opt[self.nteams * 2 + 5],
                 '-1': opt[self.nteams * 2 + 6],
                 '+2': opt[self.nteams * 2 + 11],
@@ -93,7 +136,7 @@ class Basketball:
                 '+3': opt[self.nteams * 2 + 9],
                 '-3': opt[self.nteams * 2 + 10],
             }
-            self.abilities['mu'] = {
+            abilities['mu'] = {
                 '+1': opt[self.nteams * 2 + 7],
                 '-1': opt[self.nteams * 2 + 8],
                 '+2': opt[self.nteams * 2 + 15],
@@ -103,8 +146,10 @@ class Basketball:
             }
 
         if model == 5:
-            self.abilities['time']['home'] = opt[self.nteams * 2 + 5]
-            self.abilities['time']['away'] = opt[self.nteams * 2 + 6]
+            abilities['time']['home'] = opt[self.nteams * 2 + 5]
+            abilities['time']['away'] = opt[self.nteams * 2 + 6]
+
+        return abilities
 
     def test_model(self, season=None, month=None, display=False):
         """
@@ -116,7 +161,7 @@ class Basketball:
         # If it is nba data we are working with get current season, else create a testing set with the same
         # parameters as the training set
         if season is None:
-                season = [2017]
+            season = [2017]
 
         if self.abilities['model'] == 0:
             test = datasets.dc_dataframe(season, month, bet=True)

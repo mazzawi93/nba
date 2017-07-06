@@ -64,7 +64,7 @@ def initial_guess(model, nteams):
     return np.append(teams, params)
 
 
-def dixon_coles(params, games, teams):
+def dixon_coles(params, games, teams, week, time):
     """
     This is the likelihood function for the Dixon Coles model adapted for basketball.
     :param params: Dixon-Coles Model Paramters
@@ -91,7 +91,7 @@ def dixon_coles(params, games, teams):
         amean = params[h + num] * params[a]
 
         # Log Likelihood
-        total += poisson.logpmf(row.hpts, hmean) + poisson.logpmf(row.apts, amean)
+        total += np.exp(-time * (week-row.week)) * (poisson.logpmf(row.hpts, hmean) + poisson.logpmf(row.apts, amean))
 
     return -total
 
