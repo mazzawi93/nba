@@ -310,12 +310,12 @@ class DixonRobinson(Basketball):
 
         super().__init__(test, season, month, nteams, ngames, nmargin, load, _id)
 
-        if test:
-            self.dataset = datasets.create_test_set(nteams, ngames, nmargin, point_times=True)
-        else:
-            self.dataset = datasets.game_scores(season, month)
-
         if load is False:
+
+            if test:
+                self.dataset = datasets.create_test_set(nteams, ngames, nmargin, point_times=True)
+            else:
+                self.dataset = datasets.game_scores(season, month)
 
             # Initial Guess for the minimization
             a0 = dr.initial_guess(model, self.nteams)

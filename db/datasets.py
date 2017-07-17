@@ -78,17 +78,20 @@ def game_scores(season=None, month=None, bet=False):
 
     # Fields we need from mongoDB no matter what the search fields are
     fields = {
-        'home.team': 1,
-        'away.team': 1,
-        'home.pts': 1,
-        'away.pts': 1,
+        'home': '$home.team',
+        'away': '$away.team',
+        'hpts': '$home.pts',
+        'apts': '$away.pts',
         'home_time.points': 1,
         'home_time.time': 1,
         'away_time.points': 1,
         'away_time.time': 1,
         'date': 1,
-        'bet': 1
     }
+
+    if bet:
+        fields['hbet'] = '$bet.home'
+        fields['abet'] = '$bet.away'
 
     match = {}
 
@@ -131,20 +134,20 @@ def game_scores(season=None, month=None, bet=False):
 
         point_list.sort(key=operator.itemgetter('time'))
 
-        match = {'home': game['home']['team'],
-                 'away': game['away']['team'],
-                 'home_pts': home_score,
-                 'away_pts': away_score,
+        match = {'home': game['home'],
+                 'away': game['away'],
+                 'hpts': home_score,
+                 'apts': away_score,
                  'time': point_list}
 
         # Add betting lines
         if bet:
             try:
-                match['home_bet'] = float(game['bet']['home'])
-                match['away_bet'] = float(game['bet']['away'])
+                match['hbet'] = float(game['hbet'])
+                match['abet'] = float(game['abet'])
             except KeyError:
-                match['home_bet'] = 1.0
-                match['away_bet'] = 1.0
+                match['hbet'] = 1.0
+                match['abet'] = 1.0
 
         matches.append(match)
 
