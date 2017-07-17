@@ -6,87 +6,30 @@ import numpy as np
 from db import datasets
 from db import process_utils
 from models import dixon_robinson as dr
+import time
 
 
 class Basketball:
-    def __init__(self, model, season=None, month=None, load=False, _id=None):
+    def __init__(self, test, season=None, month=None, nteams=4, ngames=4, nmargin=10, load=False, _id=None):
 
-        if season is None:
-            season = 2016
+        if test:
+            self.nteams = nteams
+            self.ngames = ngames
+            self.nmargin = nmargin
 
-        # Dixon Coles dataset is different
-        if model == 0:
-            self.dataset = datasets.dc_dataframe(season, month, False)
         else:
-            self.dataset = datasets.game_scores(season=season, month=month)
+            if season is None:
+                season = 2016
 
-        # Dataset information
-        self.teams = process_utils.name_teams(True)
-        self.nteams = 30
-        self.season = season
+            # Dataset information
+            self.nteams = 30
+            self.season = season
+            self.month = month
+
+        self.teams = process_utils.name_teams(test, nteams)
 
         if load:
             self.load_abilities(_id)
-        else:
-
-            # Initial Guess for the minimization
-            a0 = dr.initial_guess(model, self.nteams)
-
-            # Minimize Constraint
-            con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
-
-            # Minimize the likelihood function
-            if model == 0:
-                self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams, self.dataset.week.max()),
-                                    constraints=con)
-            else:
-                self.opt = minimize(dr.dixon_robinson, x0=a0, args=(self.dataset, self.teams, model),
-                                    constraints=con)
-
-            # Scipy minization requires a numpy array for all abilities, so convert them to readable dict
-            self.abilities = self.convert_abilities(self.opt.x, model)
-
-    def find_time_param(self):
-
-        time = np.arange(0, 0.025, 0.005)
-
-        # Initial Guess for the minimization
-        a0 = dr.initial_guess(0, self.nteams)
-
-        # Minimize Constraint
-        con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
-
-        s = np.zeros(5)
-        ab = []
-        i = 0
-        for t in time:
-            # Minimize the likelihood function
-            opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams, self.dataset.week.max(), t),
-                           constraints=con)
-
-            abilities = self.convert_abilities(opt.x, 0)
-            ab.append(abilities)
-
-            for row in self.dataset.itertuples():
-                # Poisson Means
-                hmean = abilities[row.home]['att'] * abilities[row.away]['def'] * abilities['home']
-                amean = abilities[row.away]['att'] * abilities[row.home]['def']
-
-                # Calculate probabilities
-                prob = 0
-                for h in range(60, 140):
-                    for a in range(60, 140):
-
-                        if h > a and row.hpts > row.apts:
-                            prob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
-                        elif h < a and row.hpts < row.apts:
-                            prob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
-
-                s[i] += np.log(prob)
-
-            i += 1
-
-        return ab, s
 
     def convert_abilities(self, opt, model):
         """
@@ -287,3 +230,108 @@ class Basketball:
 
         self.abilities = ab
         client.close()
+
+
+class DixonColes(Basketball):
+    def __init__(self, test, season=None, month=None, nteams=4, ngames=4, nmargin=10, load=False, _id=None):
+
+        super().__init__(test, season, month, nteams, ngames, nmargin, load, _id)
+
+        if test:
+            self.dataset = datasets.create_test_set(nteams, ngames, nmargin, point_times=False)
+        else:
+            self.dataset = datasets.dc_dataframe(season, month, False)
+
+        if load is False:
+
+            # Initial Guess for the minimization
+            a0 = dr.initial_guess(0, self.nteams)
+
+            # Minimize Constraint
+            con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
+
+            start = time.time()
+
+            # Minimize the likelihood function
+            self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams,),
+                                constraints=con)
+
+            end = time.time()
+            print("Time: %f" % (end - start))
+
+            # Scipy minization requires a numpy array for all abilities, so convert them to readable dict
+            self.abilities = Basketball.convert_abilities(self, self.opt.x, 0)
+
+    def find_time_param(self):
+
+        time = np.arange(0, 0.025, 0.005)
+
+        # Initial Guess for the minimization
+        a0 = dr.initial_guess(0, self.nteams)
+
+        # Minimize Constraint
+        con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
+
+        s = np.zeros(5)
+        ab = []
+        i = 0
+        for t in time:
+            # Minimize the likelihood function
+            opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams, self.dataset.week.max(), t),
+                           constraints=con)
+
+            abilities = self.convert_abilities(opt.x, 0)
+            ab.append(abilities)
+
+            for row in self.dataset.itertuples():
+                # Poisson Means
+                hmean = abilities[row.home]['att'] * abilities[row.away]['def'] * abilities['home']
+                amean = abilities[row.away]['att'] * abilities[row.home]['def']
+
+                # Calculate probabilities
+                prob = 0
+                for h in range(60, 140):
+                    for a in range(60, 140):
+
+                        if h > a and row.hpts > row.apts:
+                            prob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+                        elif h < a and row.hpts < row.apts:
+                            prob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+
+                s[i] += np.log(prob)
+
+            i += 1
+
+        return ab, s
+
+
+class DixonRobinson(Basketball):
+    def __init__(self, test, model, season=None, month=None, load=False, _id=None, nteams=4, ngames=4, nmargin=10):
+
+        super().__init__(test, season, month, nteams, ngames, nmargin, load, _id)
+
+        if test:
+            self.dataset = datasets.create_test_set(nteams, ngames, nmargin, point_times=True)
+        else:
+            self.dataset = datasets.game_scores(season, month)
+
+        if load is False:
+
+            # Initial Guess for the minimization
+            a0 = dr.initial_guess(model, self.nteams)
+
+            # Minimize Constraint
+            con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
+
+            start = time.time()
+
+            # Minimize the likelihood function
+            self.opt = minimize(dr.dixon_robinson, x0=a0, args=(self.dataset, self.teams, model),
+                                constraints=con)
+
+            end = time.time()
+            print("Time: %f" % (end - start))
+
+            # Scipy minization requires a numpy array for all abilities, so convert them to readable dict
+            self.abilities = Basketball.convert_abilities(self, self.opt.x, model)
+

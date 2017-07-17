@@ -64,7 +64,7 @@ def initial_guess(model, nteams):
     return np.append(teams, params)
 
 
-def dixon_coles(params, games, teams, week, time):
+def dixon_coles(params, games, teams):
     """
     This is the likelihood function for the Dixon Coles model adapted for basketball.
     :param params: Dixon-Coles Model Paramters
@@ -91,7 +91,7 @@ def dixon_coles(params, games, teams, week, time):
         amean = params[h + num] * params[a]
 
         # Log Likelihood
-        total += np.exp(-time * (week-row.week)) * (poisson.logpmf(row.hpts, hmean) + poisson.logpmf(row.apts, amean))
+        total += poisson.logpmf(row.hpts, hmean) + poisson.logpmf(row.apts, amean)
 
     return -total
 
@@ -200,7 +200,7 @@ def dixon_robinson(params, games, teams, model):
 
                 # Poisson mean
                 mean = params[h] * params[a + num] * params[num * 2] * time_param * run
-                match_like += (poisson.logpmf(row.home_pts, mean)) * score
+                match_like += (poisson.logpmf(row.hpts, mean)) * score
 
             # Away Team scored
             else:
@@ -230,7 +230,7 @@ def dixon_robinson(params, games, teams, model):
                 mean = params[h + num] * params[a] * time_param * run
 
                 # Add to log likelihood
-                match_like += (poisson.logpmf(row.away_pts, mean)) * score
+                match_like += (poisson.logpmf(row.apts, mean)) * score
 
         if model >= 2:
             time_param = params[num * 2 + 4]
@@ -241,6 +241,6 @@ def dixon_robinson(params, games, teams, model):
         amean = params[h + num] * params[a] * time_param * run
 
         # Total Log Likelihood
-        total += match_like - poisson.logpmf(row.home_pts, hmean) - poisson.logpmf(row.away_pts, amean)
+        total += match_like - poisson.logpmf(row.hpts, hmean) - poisson.logpmf(row.apts, amean)
 
     return -total

@@ -61,7 +61,7 @@ def dc_dataframe(season=None, month=None, bet=False):
     return df
 
 
-def game_scores(season=None, month=None, bet=False, point_times=True, weeks=False, test=False):
+def game_scores(season=None, month=None, bet=False):
     """
     Create and return a pandas dataframe for matches that includes the home and away team, and
     times for points scored.
@@ -106,47 +106,36 @@ def game_scores(season=None, month=None, bet=False, point_times=True, weeks=Fals
 
     matches = []
 
-    if weeks:
-        week = 0
-
     for game in games:
 
         # Add the time for each point if wanted
-        if point_times:
+        point_list = []
 
-            point_list = []
+        home_score = 0
+        for stat in game['home_time']:
+            if 'points' in stat:
+                time = float(stat['time'])
+                if time <= 48:
+                    stat['home'] = 1
+                    point_list.append(stat)
+                    home_score += stat['points']
 
-            home_score = 0
-            for stat in game['home_time']:
-                if 'points' in stat:
-                    time = float(stat['time'])
-                    if time <= 48:
-                        stat['home'] = 1
-                        point_list.append(stat)
-                        home_score += stat['points']
+        away_score = 0
+        for stat in game['away_time']:
+            if 'points' in stat:
+                time = float(stat['time'])
+                if time <= 48:
+                    stat['home'] = 0
+                    point_list.append(stat)
+                    away_score += stat['points']
 
-            away_score = 0
-            for stat in game['away_time']:
-                if 'points' in stat:
-                    time = float(stat['time'])
-                    if time <= 48:
-                        stat['home'] = 0
-                        point_list.append(stat)
-                        away_score += stat['points']
+        point_list.sort(key=operator.itemgetter('time'))
 
-            point_list.sort(key=operator.itemgetter('time'))
-
-            match = {'home': game['home']['team'],
-                     'away': game['away']['team'],
-                     'home_pts': home_score,
-                     'away_pts': away_score,
-                     'time': point_list}
-        else:
-
-            match = {'home': game['home']['team'],
-                     'away': game['away']['team'],
-                     'home_pts': game['home']['pts'],
-                     'away_pts': game['away']['pts']}
+        match = {'home': game['home']['team'],
+                 'away': game['away']['team'],
+                 'home_pts': home_score,
+                 'away_pts': away_score,
+                 'time': point_list}
 
         # Add betting lines
         if bet:
@@ -248,19 +237,19 @@ def create_test_set(t, g, margin, bet=False, point_times=True):
                     point_list.sort(key=operator.itemgetter('time'))
 
                     game['time'] = point_list
-                    game['home_pts'] = home_score
-                    game['away_pts'] = away_score
+                    game['hpts'] = home_score
+                    game['apts'] = away_score
                 else:
-                    game['home_pts'] = match['home']['pts']
-                    game['away_pts'] = match['away']['pts']
+                    game['hpts'] = match['home']['pts']
+                    game['apts'] = match['away']['pts']
 
                 if bet:
                     try:
-                        game['home_bet'] = float(match['bet']['home'])
-                        game['away_bet'] = float(match['bet']['away'])
+                        game['hbet'] = float(match['bet']['home'])
+                        game['abet'] = float(match['bet']['away'])
                     except KeyError:
-                        game['home_bet'] = 1.0
-                        game['away_bet'] = 1.0
+                        game['hbet'] = 1.0
+                        game['abet'] = 1.0
 
                 # Append the id to the list so that the match doesn't get selected again
                 ids.append(match['_id'])

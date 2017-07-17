@@ -69,8 +69,8 @@ def team_check(team):
                 raise ValueError("Team not in database")
 
 
-def name_teams(nba, nteams=None):
-    if nba is True:
+def name_teams(test, nteams=None):
+    if test is False:
         return teams
     else:
         team_names = []
