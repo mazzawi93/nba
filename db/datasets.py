@@ -31,6 +31,7 @@ def dc_dataframe(season=None, month=None, bet=False):
         'hpts': '$home.pts',
         'apts': '$away.pts',
         'week': {'$add': [{'$week': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2012]}, 52]}]},
+        'weekday': {'$dayOfWeek': '$date'},
         'date': 1,
     }
 
@@ -245,6 +246,7 @@ def create_test_set(t, g, margin, bet=False, point_times=True):
                 else:
                     game['hpts'] = match['home']['pts']
                     game['apts'] = match['away']['pts']
+                    game['week'] = match['week']
 
                 if bet:
                     try:

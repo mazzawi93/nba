@@ -34,6 +34,7 @@ def select_match(win_margin, ids):
                 'home.pts': 1,
                 'away.pts': 1,
                 'bet': 1,
+                'week': {'$add': [{'$week': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2012]}, 52]}]},
                 'difference': {'$subtract': ['$home.pts', '$away.pts']}
             }},
         {'$match':

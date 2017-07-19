@@ -309,7 +309,7 @@ class DixonColes(Basketball):
             self.dataset = datasets.dc_dataframe(season, month, False)
 
         # Generate team abilities if not loading from the database by minimizing the likelihood function
-        if _id is not None:
+        if _id is None:
             # Initial Guess for the minimization
             a0 = self.initial_guess(0)
 
@@ -320,7 +320,7 @@ class DixonColes(Basketball):
             start = time.time()
 
             # Minimize the likelihood function
-            self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams,),
+            self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams, 251, 0.02),
                                 constraints=con)
 
             end = time.time()
@@ -329,7 +329,7 @@ class DixonColes(Basketball):
             # Scipy minimization requires a numpy array for all abilities, so convert them to readable dict
             self.abilities = Basketball.convert_abilities(self, self.opt.x, 0)
 
-    def find_time_param(self):
+    def find_time_param(self, t):
         """
         In the Dixon and Coles model, they determine a weighting function to make sure more recent results are more
         relevant in the model.  The function they chose is exp(-Xi * t).  A larger value of Xi will give a higher weight
@@ -341,50 +341,189 @@ class DixonColes(Basketball):
         :return: Different time values
         """
 
-        # Different Xi values
-        time_param = np.arange(0, 0.055, 0.005)
-
         # Initial Guess for the minimization
-        a0 = self.opt.x
+        a0 = self.convert_dict(self.abilities)
 
         # Minimize Constraint
         con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
 
-        s = np.zeros(11)
+        s = 0
+
+        # Minimize the likelihood function
+        opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams, 251, t),
+                       constraints=con)
+
+        abilities = self.convert_abilities(opt.x, 0)
+
+        # Determine the points of the Xi function
+        for row in self.dataset.itertuples():
+            # Poisson Means
+            hmean = abilities[row.home]['att'] * abilities[row.away]['def'] * abilities['home']
+            amean = abilities[row.away]['att'] * abilities[row.home]['def']
+
+            # Calculate probabilities
+            prob = 0
+            for h in range(60, 140):
+                for a in range(60, 140):
+
+                    if h > a and row.hpts > row.apts:
+                        prob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+                    elif h < a and row.hpts < row.apts:
+                        prob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+
+                try:
+                    s += np.log(prob)
+                except RuntimeWarning:
+                    pass
+
+        return s
+
+    def convert_dict(self, abilities):
+
+        ab = abilities.copy()
+        del ab['model']
+
+        a0 = np.zeros(self.nteams * 2 + 1)
+
+        a0[self.nteams * 2] = abilities['home']
+        del ab['home']
+
         i = 0
+        for key in ab:
+            a0[i] = ab[key]['att']
+            a0[i + self.nteams] = ab[key]['def']
+            i += 1
 
-        # Iterate through each xi
-        for t in time_param:
+        return a0
 
-            # Minimize the likelihood function
-            opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams, self.dataset.week.max(), t),
-                           constraints=con)
+    def test_update_model(self, display=False):
+        """
+        This is specifically for the 2017 season when abilities have been determined up to the start of the season.
+        Each week data will be added to the dataframe and the abilities will be adjusted.
 
-            abilities = self.convert_abilities(opt.x, 0)
+        :param display: Print the results as they happen
+        :return: Accuracy of the model
+        """
 
-            # Determine the points of the Xi function
-            for row in self.dataset.itertuples():
+        train = datasets.dc_dataframe(season=[2014, 2015, 2016])
+        test = datasets.dc_dataframe(season=2017, bet=True)
+
+        bankroll = 0
+
+        nbets, nwins = 0, 0
+        npredict, ntotal = 0, 0
+
+        abilities_list = []
+
+        abilities = self.abilities
+        a0 = self.convert_dict(abilities)
+        abilities_list.append({'week': 250, 'abilities': abilities})
+
+        for week, df_week in test.groupby('week'):
+
+            # Do the prediction then update the abilities for the following week
+            for row in df_week.itertuples():
+
+                # Bet on respective teams
+                hbet = False
+                abet = False
+
                 # Poisson Means
                 hmean = abilities[row.home]['att'] * abilities[row.away]['def'] * abilities['home']
                 amean = abilities[row.away]['att'] * abilities[row.home]['def']
 
                 # Calculate probabilities
-                prob = 0
+                hprob, aprob = 0, 0
                 for h in range(60, 140):
                     for a in range(60, 140):
 
-                        if h > a and row.hpts > row.apts:
-                            prob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
-                        elif h < a and row.hpts < row.apts:
-                            prob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+                        if h > a:
+                            hprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+                        elif h < a:
+                            aprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
 
-                s[i] += np.log(prob)
+                # Implied probability from betting lines (ie. 2.00 line means 50% chance they win)
+                hbp = 1 / row.hbet
+                abp = 1 / row.abet
 
-            print('%f, %f' % (time_param[i], s[i]))
+                # Determine if we should bet on the home and away team
+                if float(hprob) >= hbp:
+                    hbet = True
+                if float(aprob) >= abp:
+                    abet = True
 
-            i += 1
+                # Determine prediction
+                if hprob >= aprob:
+                    predict = row.home
+                else:
+                    predict = row.away
 
-        return s
+                if row.hpts > row.apts:
+                    winner = row.home
+
+                    if hbet:
+                        bankroll += row.hbet - 1
+                        nbets += 1
+                        nwins += 1
+
+                    if abet:
+                        bankroll -= 1
+                        nbets += 1
+
+                else:
+                    winner = row.away
+
+                    if hbet:
+                        bankroll -= 1
+                        nbets += 1
+
+                    if abet:
+                        bankroll += row.abet - 1
+                        nbets += 1
+                        nwins += 1
+
+                if predict == winner:
+                    npredict += 1
+
+                ntotal += 1
+
+                if display:
+                    print("%s (%.2f): %.4f\t\t%s (%.2f): %.4f" % (
+                        row.home, row.hbet, hprob, row.away, row.abet, aprob))
+                    print("Home Bet: %s\t\t\tAway Bet: %s\t\t" % (hbet, abet))
+                    print("Predicted: %s\t\t\tWinner: %s\t\t\tPredictions: %d/%d\t\tPercentage: %.4f" % (
+                        predict, winner, npredict, ntotal, (npredict / ntotal)))
+                    try:
+                        print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (
+                            nbets, nwins, (nwins / nbets)))
+                    except ZeroDivisionError:
+                        print("No Bets")
+                    print("Bankroll: %.2f" % bankroll)
+                    print()
+
+            train = train.append(df_week)
+
+            # Minimize Constraint
+            con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
+
+            # Minimize the likelihood function
+            opt = minimize(dr.dixon_coles, x0=a0, args=(train, self.teams, week, 0.02),
+                           constraints=con)
+
+            abilities = self.convert_abilities(opt.x, 0)
+
+            abilities_list.append({'week': week, 'abilities': abilities})
+
+            a0 = self.convert_dict(abilities)
+
+        print("Predicted: %d/%d\t\tPercentage: %.4f" % (npredict, ntotal, (npredict / ntotal)))
+        try:
+            print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (nbets, nwins, (nwins / nbets)))
+        except ZeroDivisionError:
+            print("No Bets")
+        print("Bankroll: %.2f" % bankroll)
+
+        return abilities_list
 
 
 class DixonRobinson(Basketball):
