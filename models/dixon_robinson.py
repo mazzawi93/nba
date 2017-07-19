@@ -30,7 +30,7 @@ def defense_constraint(params, constraint, nteams):
     return sum(params[nteams:nteams * 2]) / nteams - constraint
 
 
-def dixon_coles(params, games, nteams):
+def dixon_coles(params, games, nteams, week, time):
     """
     This is the likelihood function for the Dixon Coles model adapted for basketball.
     :param params: Dixon-Coles Model Paramters
@@ -42,9 +42,12 @@ def dixon_coles(params, games, nteams):
     hmean = params[games['home']] * params[games['away'] + nteams] * params[nteams*2]
     amean = params[games['away']] * params[games['home'] + nteams]
 
-    total = (poisson.logpmf(games['hpts'], hmean) + poisson.logpmf(games['apts'], amean))
+    likelihood = (poisson.logpmf(games['hpts'], hmean) + poisson.logpmf(games['apts'], amean))
 
-    return -np.sum(total)
+    # TODO: Incorporate the decay factor
+    # (np.exp(-time * (week-games['week']))) *
+
+    return -np.sum(likelihood)
 
 
 def dixon_robinson(params, games, teams, model):

@@ -3,17 +3,19 @@ import string
 from random import shuffle
 
 import pandas as pd
+import numpy as np
 from pymongo import MongoClient
 
 from db import process_data
 from db import process_utils
 
 
-def dc_dataframe(season=None, month=None, bet=False):
+def dc_dataframe(teams, season=None, month=None, bet=False):
     """
     Create a Pandas DataFrame for the Dixon and Coles model that uses final scores only.
     Can specify the NBA season, month and if betting information should be included.
 
+    :param teams: Team names
     :param season: NBA Season
     :param month: Calendar Month
     :param bet: Betting Lines
@@ -52,6 +54,19 @@ def dc_dataframe(season=None, month=None, bet=False):
     games = collection.aggregate(pipeline, allowDiskUse=True)
 
     df = pd.DataFrame(list(games))
+
+    hi = np.zeros(len(df), dtype=int)
+    ai = np.zeros(len(df), dtype=int)
+
+    # Iterate through each game
+    for row in df.itertuples():
+
+        # Team indexes
+        hi[row.Index] = teams.index(row.home)
+        ai[row.Index] = teams.index(row.away)
+
+    df['home'] = pd.Series(hi, index=df.index)
+    df['away'] = pd.Series(ai, index=df.index)
 
     # Remove unnecessary information
     del df['_id']

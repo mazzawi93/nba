@@ -307,26 +307,12 @@ class DixonColes(Basketball):
         if test:
             self.dataset = datasets.create_test_set(nteams, ngames, nmargin, point_times=False)
         else:
-            self.dataset = datasets.dc_dataframe(season, month, False)
+            self.dataset = datasets.dc_dataframe(self.teams, season, month, False)
 
         # Generate team abilities if not loading from the database by minimizing the likelihood function
         if _id is None:
             # Initial Guess for the minimization
             a0 = self.initial_guess(0)
-
-            copy_df = self.dataset.copy()
-
-            hi = np.zeros(len(copy_df), dtype=int)
-            ai = np.zeros(len(copy_df), dtype=int)
-
-            # Iterate through each game
-            for row in self.dataset.itertuples():
-                # Team indexes
-                hi[row.Index] = self.teams.index(row.home)
-                ai[row.Index] = self.teams.index(row.away)
-
-            copy_df['home'] = pd.Series(hi, index=copy_df.index)
-            copy_df['away'] = pd.Series(ai, index=copy_df.index)
 
             # Minimize Constraint
             con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
@@ -335,8 +321,8 @@ class DixonColes(Basketball):
             start = time.time()
 
             # Minimize the likelihood function
-            self.opt = minimize(dr.dixon_coles, x0=a0, args=(copy_df, len(self.teams)),
-                                constraints=con)
+            self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, len(self.teams), 251, 0.02),
+                                constraints=con, method='SLSQP')
 
             end = time.time()
             print("Time: %f" % (end - start))
@@ -357,7 +343,7 @@ class DixonColes(Basketball):
         """
 
         # Initial Guess for the minimization
-        a0 = self.convert_dict(self.abilities)
+        a0 = self.initial_guess(0)
 
         # Minimize Constraint
         con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
@@ -389,153 +375,6 @@ class DixonColes(Basketball):
             s += np.log(prob)
 
         return s
-
-    def convert_dict(self, abilities):
-
-        ab = abilities.copy()
-        del ab['model']
-
-        a0 = np.zeros(self.nteams * 2 + 1)
-
-        a0[self.nteams * 2] = abilities['home']
-        del ab['home']
-
-        i = 0
-        for key in ab:
-            a0[i] = ab[key]['att']
-            a0[i + self.nteams] = ab[key]['def']
-            i += 1
-
-        return a0
-
-    def test_update_model(self, display=False):
-        """
-        This is specifically for the 2017 season when abilities have been determined up to the start of the season.
-        Each week data will be added to the dataframe and the abilities will be adjusted.
-
-        :param display: Print the results as they happen
-        :return: Accuracy of the model
-        """
-
-        train = datasets.dc_dataframe(season=[2014, 2015, 2016])
-        test = datasets.dc_dataframe(season=2017, bet=True)
-
-        bankroll = 0
-
-        nbets, nwins = 0, 0
-        npredict, ntotal = 0, 0
-
-        abilities_list = []
-
-        abilities = self.abilities
-        a0 = self.convert_dict(abilities)
-        abilities_list.append({'week': 250, 'abilities': abilities})
-
-        for week, df_week in test.groupby('week'):
-
-            # Do the prediction then update the abilities for the following week
-            for row in df_week.itertuples():
-
-                # Bet on respective teams
-                hbet = False
-                abet = False
-
-                # Poisson Means
-                hmean = abilities[row.home]['att'] * abilities[row.away]['def'] * abilities['home']
-                amean = abilities[row.away]['att'] * abilities[row.home]['def']
-
-                # Calculate probabilities
-                hprob, aprob = 0, 0
-                for h in range(60, 140):
-                    for a in range(60, 140):
-
-                        if h > a:
-                            hprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
-                        elif h < a:
-                            aprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
-
-                # Implied probability from betting lines (ie. 2.00 line means 50% chance they win)
-                hbp = 1 / row.hbet
-                abp = 1 / row.abet
-
-                # Determine if we should bet on the home and away team
-                if float(hprob) >= hbp:
-                    hbet = True
-                if float(aprob) >= abp:
-                    abet = True
-
-                # Determine prediction
-                if hprob >= aprob:
-                    predict = row.home
-                else:
-                    predict = row.away
-
-                if row.hpts > row.apts:
-                    winner = row.home
-
-                    if hbet:
-                        bankroll += row.hbet - 1
-                        nbets += 1
-                        nwins += 1
-
-                    if abet:
-                        bankroll -= 1
-                        nbets += 1
-
-                else:
-                    winner = row.away
-
-                    if hbet:
-                        bankroll -= 1
-                        nbets += 1
-
-                    if abet:
-                        bankroll += row.abet - 1
-                        nbets += 1
-                        nwins += 1
-
-                if predict == winner:
-                    npredict += 1
-
-                ntotal += 1
-
-                if display:
-                    print("%s (%.2f): %.4f\t\t%s (%.2f): %.4f" % (
-                        row.home, row.hbet, hprob, row.away, row.abet, aprob))
-                    print("Home Bet: %s\t\t\tAway Bet: %s\t\t" % (hbet, abet))
-                    print("Predicted: %s\t\t\tWinner: %s\t\t\tPredictions: %d/%d\t\tPercentage: %.4f" % (
-                        predict, winner, npredict, ntotal, (npredict / ntotal)))
-                    try:
-                        print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (
-                            nbets, nwins, (nwins / nbets)))
-                    except ZeroDivisionError:
-                        print("No Bets")
-                    print("Bankroll: %.2f" % bankroll)
-                    print()
-
-            train = train.append(df_week)
-
-            # Minimize Constraint
-            con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
-
-            # Minimize the likelihood function
-            opt = minimize(dr.dixon_coles, x0=a0, args=(train, self.teams, week, 0.02),
-                           constraints=con)
-
-            abilities = self.convert_abilities(opt.x, 0)
-
-            abilities_list.append({'week': week, 'abilities': abilities})
-
-            a0 = self.convert_dict(abilities)
-
-        print("Predicted: %d/%d\t\tPercentage: %.4f" % (npredict, ntotal, (npredict / ntotal)))
-        try:
-            print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (nbets, nwins, (nwins / nbets)))
-        except ZeroDivisionError:
-            print("No Bets")
-        print("Bankroll: %.2f" % bankroll)
-
-        return abilities_list
 
 
 class DixonRobinson(Basketball):
