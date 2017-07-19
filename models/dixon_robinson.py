@@ -30,7 +30,7 @@ def defense_constraint(params, constraint, nteams):
     return sum(params[nteams:nteams * 2]) / nteams - constraint
 
 
-def dixon_coles(params, games, teams, week=0, time=0):
+def dixon_coles(params, games, nteams):
     """
     This is the likelihood function for the Dixon Coles model adapted for basketball.
     :param params: Dixon-Coles Model Paramters
@@ -39,30 +39,12 @@ def dixon_coles(params, games, teams, week=0, time=0):
     :return: Log Likelihood from the Dixon-Coles Model
     """
 
-    # Likelihood
-    total = 0
+    hmean = params[games['home']] * params[games['away'] + nteams] * params[nteams*2]
+    amean = params[games['away']] * params[games['home'] + nteams]
 
-    # Number of teams
-    num = len(teams)
+    total = (poisson.logpmf(games['hpts'], hmean) + poisson.logpmf(games['apts'], amean))
 
-    # Iterate through each game
-    for row in games.itertuples():
-
-        # Team indexes
-        h = teams.index(row.home)
-        a = teams.index(row.away)
-
-        # Home and Away Poisson intensities
-        hmean = params[num * 2] * params[h] * params[a + num]
-        amean = params[h + num] * params[a]
-
-        # Log Likelihood
-        try:
-            total += np.exp(-time * (week-row.week)) * (poisson.logpmf(row.hpts, hmean) + poisson.logpmf(row.apts, amean))
-        except AttributeError:
-            total += poisson.logpmf(row.hpts, hmean) + poisson.logpmf(row.apts, amean)
-
-    return -total
+    return -np.sum(total)
 
 
 def dixon_robinson(params, games, teams, model):

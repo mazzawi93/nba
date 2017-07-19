@@ -2,6 +2,7 @@ from bson.objectid import ObjectId
 from pymongo import MongoClient
 from scipy.optimize import minimize
 from scipy.stats import poisson
+import pandas as pd
 import numpy as np
 from db import datasets
 from db import process_utils
@@ -313,6 +314,20 @@ class DixonColes(Basketball):
             # Initial Guess for the minimization
             a0 = self.initial_guess(0)
 
+            copy_df = self.dataset.copy()
+
+            hi = np.zeros(len(copy_df), dtype=int)
+            ai = np.zeros(len(copy_df), dtype=int)
+
+            # Iterate through each game
+            for row in self.dataset.itertuples():
+                # Team indexes
+                hi[row.Index] = self.teams.index(row.home)
+                ai[row.Index] = self.teams.index(row.away)
+
+            copy_df['home'] = pd.Series(hi, index=copy_df.index)
+            copy_df['away'] = pd.Series(ai, index=copy_df.index)
+
             # Minimize Constraint
             con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
 
@@ -320,7 +335,7 @@ class DixonColes(Basketball):
             start = time.time()
 
             # Minimize the likelihood function
-            self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams, 251, 0.02),
+            self.opt = minimize(dr.dixon_coles, x0=a0, args=(copy_df, len(self.teams)),
                                 constraints=con)
 
             end = time.time()
@@ -371,10 +386,7 @@ class DixonColes(Basketball):
                     elif h < a and row.hpts < row.apts:
                         prob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
 
-                try:
-                    s += np.log(prob)
-                except RuntimeWarning:
-                    pass
+            s += np.log(prob)
 
         return s
 
