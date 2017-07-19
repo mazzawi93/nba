@@ -30,41 +30,7 @@ def defense_constraint(params, constraint, nteams):
     return sum(params[nteams:nteams * 2]) / nteams - constraint
 
 
-def initial_guess(model, nteams):
-    """
-    Create an initial guess for the minimization function
-    :param model: The model implemented (0: DC, 1: Base DR model, 2: Time Parameters, 3: winning/losing)
-    :param nteams: The number of teams
-    :return: Numpy array of team abilities (Attack, Defense) and Home Advantage and other factors
-    """
-
-    # Attack and Defence parameters
-    att = np.full((1, nteams), 100)
-    defense = np.full((1, nteams), 1)
-    teams = np.append(att, defense)
-
-    # Base model only contains the home advantage
-    if model == 1:
-        params = np.full((1, 1), 1.5)
-    # The time parameters are added to the model
-    elif model == 2:
-        params = np.full((1, 5), 1.5)
-    # Model is extended by adding scoreline parameters if a team is winning
-    elif model == 3:
-        params = np.full((1, 9), 1.5)
-    # Extend model with larger winning margins
-    elif model == 4:
-        params = np.full((1, 17), 1.5)
-    # Time Rates
-    elif model == 5:
-        params = np.full((1, 7), 1.5)
-    else:
-        params = np.full((1, 1), 1.5)
-
-    return np.append(teams, params)
-
-
-def dixon_coles(params, games, teams):
+def dixon_coles(params, games, teams, week=0, time=0):
     """
     This is the likelihood function for the Dixon Coles model adapted for basketball.
     :param params: Dixon-Coles Model Paramters
@@ -91,7 +57,10 @@ def dixon_coles(params, games, teams):
         amean = params[h + num] * params[a]
 
         # Log Likelihood
-        total += poisson.logpmf(row.hpts, hmean) + poisson.logpmf(row.apts, amean)
+        try:
+            total += np.exp(-time * (week-row.week)) * (poisson.logpmf(row.hpts, hmean) + poisson.logpmf(row.apts, amean))
+        except AttributeError:
+            total += poisson.logpmf(row.hpts, hmean) + poisson.logpmf(row.apts, amean)
 
     return -total
 
