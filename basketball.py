@@ -305,7 +305,7 @@ class DixonColes(Basketball):
         super().__init__(test, season, month, nteams, ngames, nmargin, _id)
 
         if test:
-            self.dataset = datasets.create_test_set(nteams, ngames, nmargin, point_times=False)
+            self.dataset = datasets.create_test_set(nteams, ngames, nmargin, False)
         else:
             self.dataset = datasets.dc_dataframe(self.teams, season, month, False)
 
@@ -321,7 +321,7 @@ class DixonColes(Basketball):
             start = time.time()
 
             # Minimize the likelihood function
-            self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, len(self.teams), 251, 0.02),
+            self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, 355, 0.02),
                                 constraints=con, method='SLSQP')
 
             end = time.time()
@@ -351,7 +351,7 @@ class DixonColes(Basketball):
         s = 0
 
         # Minimize the likelihood function
-        opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.teams, 251, t),
+        opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, 355, t),
                        constraints=con)
 
         abilities = self.convert_abilities(opt.x, 0)
@@ -401,9 +401,9 @@ class DixonRobinson(Basketball):
         super().__init__(test, season, month, nteams, ngames, nmargin, _id)
 
         if test:
-            self.dataset = datasets.create_test_set(nteams, ngames, nmargin, point_times=True)
+            self.dataset = datasets.create_test_set(nteams, ngames, nmargin, True)
         else:
-            self.dataset = datasets.game_scores(season, month)
+            self.dataset = datasets.dr_dataframe(self.teams, season, month)
 
         # Generate team abilities if not loading from the database by minimizing the likelihood function
         if _id is None:
@@ -411,13 +411,14 @@ class DixonRobinson(Basketball):
             a0 = self.initial_guess(model)
 
             # Minimize Constraint
-            con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
+            con = [{'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)},
+                   {'type': 'eq', 'fun': dr.defense_constraint, 'args': (1, self.nteams,)}]
 
             # Time the optimization
             start = time.time()
 
             # Minimize the likelihood function
-            self.opt = minimize(dr.dixon_robinson, x0=a0, args=(self.dataset, self.teams, model),
+            self.opt = minimize(dr.dixon_robinson, x0=a0, args=(self.dataset, self.nteams, model),
                                 constraints=con)
 
             end = time.time()
