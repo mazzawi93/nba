@@ -28,13 +28,6 @@ def select_match(win_margin, ids, dr):
     else:
         margin = '$gte'
 
-    # MongoDB Aggregation
-    same_project = {
-        'hpts': '$home.pts',
-        'apts': '$away.pts',
-        'difference': {'$subtract': ['$home.pts', '$away.pts']}
-    }
-
     match = {
         'difference': {margin: win_margin},
         '_id': {'$nin': ids}}
@@ -42,19 +35,28 @@ def select_match(win_margin, ids, dr):
     if dr:
         # TODO: Add point times
         pipeline = [
-            {'$project': same_project},
+            {'$project': {
+                    'hpts': '$home.pts',
+                    'apts': '$away.pts',
+                    'hbet': '$bet.home',
+                    'abet': '$bet.away',
+                    'difference': {'$subtract': ['$home.pts', '$away.pts']}
+
+                }},
             {'$match': match},
             {'$limit': 1}
         ]
     else:
-        # TODO: Add weeks
         pipeline = [
             {'$project':
                 {
                     'hpts': '$home.pts',
                     'apts': '$away.pts',
                     'week': {'$add': [{'$week': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2010]}, 52]}]},
+                    'hbet': '$bet.home',
+                    'abet': '$bet.away',
                     'difference': {'$subtract': ['$home.pts', '$away.pts']}
+
                 }},
             {'$match': match},
             {'$limit': 1}
@@ -140,7 +142,7 @@ def create_test_set(t, g, margin, dr=True):
     return pd.DataFrame(data)
 
 
-def dc_dataframe(teams, season=None, month=None, bet=False):
+def dc_dataframe(teams=None, season=None, month=None, bet=False):
     """
     Create a Pandas DataFrame for the Dixon and Coles model that uses final scores only.
     Can specify the NBA season, month and if betting information should be included.
@@ -185,17 +187,18 @@ def dc_dataframe(teams, season=None, month=None, bet=False):
 
     df = pd.DataFrame(list(games))
 
-    hi = np.zeros(len(df), dtype=int)
-    ai = np.zeros(len(df), dtype=int)
+    if teams is not None:
+        hi = np.zeros(len(df), dtype=int)
+        ai = np.zeros(len(df), dtype=int)
 
-    # Iterate through each game
-    for row in df.itertuples():
-        # Team indexes
-        hi[row.Index] = teams.index(row.home)
-        ai[row.Index] = teams.index(row.away)
+        # Iterate through each game
+        for row in df.itertuples():
+            # Team indexes
+            hi[row.Index] = teams.index(row.home)
+            ai[row.Index] = teams.index(row.away)
 
-    df['home'] = pd.Series(hi, index=df.index)
-    df['away'] = pd.Series(ai, index=df.index)
+        df['home'] = pd.Series(hi, index=df.index)
+        df['away'] = pd.Series(ai, index=df.index)
 
     # Remove unnecessary information
     del df['_id']
@@ -205,10 +208,12 @@ def dc_dataframe(teams, season=None, month=None, bet=False):
     return df
 
 
-def dr_dataframe(teams, season=None, month=None, bet=False):
+def dr_dataframe(teams=None, season=None, month=None, bet=False):
     """
     Create and return a pandas dataframe for matches that includes the home and away team, and
     times for points scored.
+
+    Reworking it to include extended Dixon Robinson model statistics
 
     :param month: Calendar Month
     :param season: NBA Season (All stored season selected if None)
@@ -249,17 +254,18 @@ def dr_dataframe(teams, season=None, month=None, bet=False):
 
     df = pd.DataFrame(list(games))
 
-    hi = np.zeros(len(df), dtype=int)
-    ai = np.zeros(len(df), dtype=int)
+    if teams is not None:
+        hi = np.zeros(len(df), dtype=int)
+        ai = np.zeros(len(df), dtype=int)
 
-    # Iterate through each game
-    for row in df.itertuples():
-        # Team indexes
-        hi[row.Index] = teams.index(row.home)
-        ai[row.Index] = teams.index(row.away)
+        # Iterate through each game
+        for row in df.itertuples():
+            # Team indexes
+            hi[row.Index] = teams.index(row.home)
+            ai[row.Index] = teams.index(row.away)
 
-    df['home'] = pd.Series(hi, index=df.index)
-    df['away'] = pd.Series(ai, index=df.index)
+        df['home'] = pd.Series(hi, index=df.index)
+        df['away'] = pd.Series(ai, index=df.index)
 
     # Remove unnecessary information
     del df['_id']

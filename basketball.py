@@ -1,13 +1,25 @@
-from bson.objectid import ObjectId
-from pymongo import MongoClient
+import time
+
+import numpy as np
 from scipy.optimize import minimize
 from scipy.stats import poisson
-import pandas as pd
-import numpy as np
+
 from db import datasets
 from db import process_utils
 from models import dixon_robinson as dr
-import time
+
+
+def determine_probabilities(hmean, amean):
+    hprob, aprob = 0, 0
+    for h in range(60, 140):
+        for a in range(60, 140):
+
+            if h > a:
+                hprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+            elif h < a:
+                aprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+
+    return hprob, aprob
 
 
 class Basketball:
@@ -15,17 +27,16 @@ class Basketball:
     Basketball class used to manipulate team abilities and simulate upcoming seasons
     """
 
-    def __init__(self, test, season=None, month=None, nteams=4, ngames=4, nmargin=10, _id=None):
+    def __init__(self, test, season=None, month=None, nteams=4, ngames=4, nmargin=10):
         """
         Initialize Basketball class by setting class variables
 
-        :param test: Testing Set
+        :param test: Fabricated Set
         :param season: NBA Season(s)
         :param month: Calendar Month(s)
         :param nteams: Number of teams for test set
         :param ngames: Number of games played between teams for test set
         :param nmargin: Winning Margin in test set
-        :param _id: Team abilities MongoDB ID
         """
 
         if test:
@@ -39,37 +50,37 @@ class Basketball:
             self.season = season
             self.month = month
 
-        # Team names for dataset are letters of the alphabet
         self.teams = process_utils.name_teams(test, nteams)
 
-        # Load team abilities if needed
-        if _id is not None:
-            self.load_abilities(_id)
+        self.con = [{'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)},
+                    {'type': 'eq', 'fun': dr.defense_constraint, 'args': (1, self.nteams,)}]
+
+        self.abilities = None
 
     def convert_abilities(self, opt, model):
         """
         Convert the numpy abilities array into a more usable dict
         :param opt: Abilities from optimization
-        :param model: Model number determines which parameters are included
+        :param model: Model number determines which parameters are included (0 is Dixon Coles)
         """
-        abilities = {'model': model}
+        self.abilities = {'model': model}
 
         i = 0
 
         # Attack and defense
         for team in self.teams:
-            abilities[team] = {
+            self.abilities[team] = {
                 'att': opt[i],
                 'def': opt[i + self.nteams]
             }
             i += 1
 
         # Home Advantage
-        abilities['home'] = opt[self.nteams * 2]
+        self.abilities['home'] = opt[self.nteams * 2]
 
         # Time parameters
         if model >= 2:
-            abilities['time'] = {
+            self.abilities['time'] = {
                 'q1': opt[self.nteams * 2 + 1],
                 'q2': opt[self.nteams * 2 + 2],
                 'q3': opt[self.nteams * 2 + 3],
@@ -78,16 +89,16 @@ class Basketball:
 
         # Team 4 min stretch for models 3 and 4
         if model == 3:
-            abilities['lambda'] = {
+            self.abilities['lambda'] = {
                 '+1': opt[self.nteams * 2 + 5],
                 '-1': opt[self.nteams * 2 + 6],
             }
-            abilities['mu'] = {
+            self.abilities['mu'] = {
                 '+1': opt[self.nteams * 2 + 7],
                 '-1': opt[self.nteams * 2 + 8]
             }
         elif model == 4:
-            abilities['lambda'] = {
+            self.abilities['lambda'] = {
                 '+1': opt[self.nteams * 2 + 5],
                 '-1': opt[self.nteams * 2 + 6],
                 '+2': opt[self.nteams * 2 + 11],
@@ -95,7 +106,7 @@ class Basketball:
                 '+3': opt[self.nteams * 2 + 9],
                 '-3': opt[self.nteams * 2 + 10],
             }
-            abilities['mu'] = {
+            self.abilities['mu'] = {
                 '+1': opt[self.nteams * 2 + 7],
                 '-1': opt[self.nteams * 2 + 8],
                 '+2': opt[self.nteams * 2 + 15],
@@ -105,14 +116,13 @@ class Basketball:
             }
 
         if model == 5:
-            abilities['time']['home'] = opt[self.nteams * 2 + 5]
-            abilities['time']['away'] = opt[self.nteams * 2 + 6]
+            self.abilities['time']['home'] = opt[self.nteams * 2 + 5]
+            self.abilities['time']['away'] = opt[self.nteams * 2 + 6]
 
-        return abilities
-
-    def test_model(self, season=None, month=None, display=False):
+    def test_model(self, fake, season=None, month=None, display=False):
         """
         Test the optimized model against a testing set and apply a betting strategy
+        :param fake:
         :param season: NBA Season(s)
         :param month: Calendar month(s)
         :param display: Print the results as they happen
@@ -125,13 +135,20 @@ class Basketball:
             season = 2017
 
         # Dixon model has different dataset
-        if self.abilities['model'] == 0:
-            test = datasets.dc_dataframe(season, month, bet=True)
+        if fake:
+            test = datasets.create_test_set(self.nteams, self.ngames, self.nmargin)
         else:
-            test = datasets.game_scores(season, month, bet=True)
+            # Dixon Coles
+            if self.abilities['model'] == 0:
+                test = datasets.dc_dataframe(season=season, month=month, bet=True)
+            # Dixon Robinson
+            else:
+                test = datasets.dr_dataframe(season=season, month=month, bet=True)
 
+        # Betting bankroll
         bankroll = 0
 
+        # Predictions and bet wins
         nbets, nwins = 0, 0
         npredict, ntotal = 0, 0
 
@@ -143,17 +160,10 @@ class Basketball:
 
             # Poisson Means
             hmean = self.abilities[row.home]['att'] * self.abilities[row.away]['def'] * self.abilities['home']
-            amean = self.abilities[row.away]['att'] * self.abilities[row.home]['def']
+            amean = self.abilities[row.home]['def'] * self.abilities[row.away]['att']
 
             # Calculate probabilities
-            hprob, aprob = 0, 0
-            for h in range(60, 140):
-                for a in range(60, 140):
-
-                    if h > a:
-                        hprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
-                    elif h < a:
-                        aprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+            hprob, aprob = determine_probabilities(hmean, amean)
 
             # Implied probability from betting lines (ie. 2.00 line means 50% chance they win)
             hbp = 1 / row.hbet
@@ -171,6 +181,7 @@ class Basketball:
             else:
                 predict = row.away
 
+            # Determine accuracy and betting result
             if row.hpts > row.apts:
                 winner = row.home
 
@@ -200,6 +211,7 @@ class Basketball:
 
             ntotal += 1
 
+            # Game by game summary
             if display:
                 print("%s (%.2f): %.4f\t\t%s (%.2f): %.4f" % (
                     row.home, row.hbet, hprob, row.away, row.abet, aprob))
@@ -213,42 +225,13 @@ class Basketball:
                 print("Bankroll: %.2f" % bankroll)
                 print()
 
+        # Testing Summary
         print("Predicted: %d/%d\t\tPercentage: %.4f" % (npredict, ntotal, (npredict / ntotal)))
         try:
             print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (nbets, nwins, (nwins / nbets)))
         except ZeroDivisionError:
             print("No Bets")
         print("Bankroll: %.2f" % bankroll)
-
-    def store_abilities(self):
-        """
-        Store team abilities in MongoDB
-        """
-
-        client = MongoClient()
-        db = client.basketball
-        collection = db.abilities
-
-        abilities = self.abilities
-        abilities['season'] = self.season
-        collection.insert(abilities)
-
-        client.close()
-
-    def load_abilities(self, _id):
-        """
-        Load team abilities from mongoDB
-        :param _id: MongoDB id
-        """
-
-        client = MongoClient()
-        db = client.basketball
-        collection = db.abilities
-
-        ab = collection.find_one({'_id': ObjectId(_id)})
-
-        self.abilities = ab
-        client.close()
 
     def initial_guess(self, model):
         """
@@ -288,49 +271,43 @@ class DixonColes(Basketball):
     Subclass for the Dixon and Coles model which uses the full time scores of each match.
     """
 
-    def __init__(self, test, season=None, month=None, nteams=4, ngames=4, nmargin=10, _id=None):
+    def __init__(self, test, season=None, month=None, nteams=4, ngames=4, nmargin=10):
         """
         Initialize DixonColes instance.  Can be a test dataset where the teams are structured from best to worst
         based on results or using NBA seasons.  If an ID is given, the abilities will be loaded from the database.
 
-        :param test: Testing Set
+        :param test: Fabricated Set
         :param season: NBA Season(s)
         :param month: Calendar Month(s)
         :param nteams: Number of teams for test set
         :param ngames: Number of games played between teams for test set
         :param nmargin: Winning Margin in test set
-        :param _id: Team abilities MongoDB ID
         """
 
-        super().__init__(test, season, month, nteams, ngames, nmargin, _id)
+        super().__init__(test, season, month, nteams, ngames, nmargin)
 
         if test:
             self.dataset = datasets.create_test_set(nteams, ngames, nmargin, False)
         else:
             self.dataset = datasets.dc_dataframe(self.teams, season, month, False)
 
-        # Generate team abilities if not loading from the database by minimizing the likelihood function
-        if _id is None:
-            # Initial Guess for the minimization
-            a0 = self.initial_guess(0)
+        # Initial Guess for the minimization
+        a0 = self.initial_guess(0)
 
-            # Minimize Constraint
-            con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
+        # Time the optimization
+        start = time.time()
 
-            # Time the optimization
-            start = time.time()
+        # Minimize the likelihood function
+        self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.nteams, 355, 0.015),
+                            constraints=self.con, method='SLSQP')
 
-            # Minimize the likelihood function
-            self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, 355, 0.02),
-                                constraints=con, method='SLSQP')
+        end = time.time()
+        print("Time: %f" % (end - start))
 
-            end = time.time()
-            print("Time: %f" % (end - start))
+        # Scipy minimization requires a numpy array for all abilities, so convert them to readable dict
+        self.convert_abilities(self.opt.x, 0)
 
-            # Scipy minimization requires a numpy array for all abilities, so convert them to readable dict
-            self.abilities = Basketball.convert_abilities(self, self.opt.x, 0)
-
-    def find_time_param(self, t):
+    def find_time_param(self, xi):
         """
         In the Dixon and Coles model, they determine a weighting function to make sure more recent results are more
         relevant in the model.  The function they chose is exp(-Xi * t).  A larger value of Xi will give a higher weight
@@ -338,6 +315,7 @@ class DixonColes(Basketball):
         do so, we must acquire team abilities with different Xi values and find the estimates with those Xi values.
 
         t values are weeks.
+        355 is the beginning of the 2017 nba season
 
         :return: Different time values
         """
@@ -345,22 +323,18 @@ class DixonColes(Basketball):
         # Initial Guess for the minimization
         a0 = self.initial_guess(0)
 
-        # Minimize Constraint
-        con = {'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)}
-
         s = 0
 
         # Minimize the likelihood function
-        opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, 355, t),
-                       constraints=con)
-
-        abilities = self.convert_abilities(opt.x, 0)
+        opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.nteams, 355, xi),
+                       constraints=self.con)
 
         # Determine the points of the Xi function
         for row in self.dataset.itertuples():
+
             # Poisson Means
-            hmean = abilities[row.home]['att'] * abilities[row.away]['def'] * abilities['home']
-            amean = abilities[row.away]['att'] * abilities[row.home]['def']
+            hmean = opt.x[row.home] * opt.x[row.away + self.nteams] * opt.x[self.nteams * 2]
+            amean = opt.x[row.away] * opt.x[row.home + self.nteams]
 
             # Calculate probabilities
             prob = 0
@@ -383,46 +357,39 @@ class DixonRobinson(Basketball):
     scores.
     """
 
-    def __init__(self, test, model, season=None, month=None, nteams=4, ngames=4, nmargin=10, _id=None):
+    def __init__(self, test, model, season=None, month=None, nteams=4, ngames=4, nmargin=10):
         """
         Initialize DixonRobinson instance.  Can be a test dataset where the teams are structured from best to worst
         based on results or using NBA seasons.  If an ID is given, the abilities will be loaded from the database.
 
-        :param test: Testing Set
+        :param test: Fabricated Set
         :param model: Dixon and Robinson model (1 to 4)
         :param season: NBA Season(s)
         :param month: Calendar Month(s)
         :param nteams: Number of teams for test set
         :param ngames: Number of games played between teams for test set
         :param nmargin: Winning Margin in test set
-        :param _id: Team abilities MongoDB ID
         """
 
-        super().__init__(test, season, month, nteams, ngames, nmargin, _id)
+        super().__init__(test, season, month, nteams, ngames, nmargin)
 
         if test:
             self.dataset = datasets.create_test_set(nteams, ngames, nmargin, True)
         else:
             self.dataset = datasets.dr_dataframe(self.teams, season, month)
 
-        # Generate team abilities if not loading from the database by minimizing the likelihood function
-        if _id is None:
-            # Initial Guess for the minimization
-            a0 = self.initial_guess(model)
+        # Initial Guess for the minimization
+        a0 = self.initial_guess(model)
 
-            # Minimize Constraint
-            con = [{'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)},
-                   {'type': 'eq', 'fun': dr.defense_constraint, 'args': (1, self.nteams,)}]
+        # Time the optimization
+        start = time.time()
 
-            # Time the optimization
-            start = time.time()
+        # Minimize the likelihood function
+        self.opt = minimize(dr.dixon_robinson, x0=a0, args=(self.dataset, self.nteams, model),
+                            constraints=self.con)
 
-            # Minimize the likelihood function
-            self.opt = minimize(dr.dixon_robinson, x0=a0, args=(self.dataset, self.nteams, model),
-                                constraints=con)
+        end = time.time()
+        print("Time: %f" % (end - start))
 
-            end = time.time()
-            print("Time: %f" % (end - start))
-
-            # Scipy minimization requires a numpy array for all abilities, so convert them to readable dict
-            self.abilities = Basketball.convert_abilities(self, self.opt.x, model)
+        # Scipy minimization requires a numpy array for all abilities, so convert them to readable dict
+        self.convert_abilities(self.opt.x, model)

@@ -1,11 +1,17 @@
 import string
 
-teams = ['ATL', 'BOS', 'BRK', 'CHO', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GSW', 'HOU', 'IND', 'LAC', 'LAL',
-         'MEM', 'MIA',
-         'MIL', 'MIN', 'NOP', 'NYK', 'OKC', 'ORL', 'PHI', 'PHO', 'POR', 'SAC', 'SAS', 'TOR', 'UTA', 'WAS']
+teams = ['ATL', 'BOS', 'BRK', 'CHO', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GSW', 'HOU', 'IND', 'LAC', 'LAL', 'MEM',
+         'MIA', 'MIL', 'MIN', 'NOP', 'NYK', 'OKC', 'ORL', 'PHI', 'PHO', 'POR', 'SAC', 'SAS', 'TOR', 'UTA', 'WAS']
 
 
 def season_check(season, fields, match):
+    """
+    Add season to the mongoDB query fields
+    :param season: NBA season
+    :param fields: MongoDB $project fields
+    :param match: MongoDB $match field
+    """
+
     if season is not None:
 
         # Convert season to list because aggregation uses $in
@@ -27,6 +33,13 @@ def season_check(season, fields, match):
 
 
 def month_check(month, fields, match):
+    """
+    Add month to the mongoDB query fields
+    :param month: Calendar Month
+    :param fields: MongoDB Project fields
+    :param match: MongoDB Match fields
+    """
+
     if month is not None:
         if isinstance(month, int):
             month = [month]
@@ -36,21 +49,6 @@ def month_check(month, fields, match):
 
         fields['month'] = {'$month': '$date'}
         match['month'] = {'$in': month}
-
-
-def season_check2(season):
-    """
-    Helper function to determine if season is correctly entered
-    :param season: List of seasons or None
-    """
-
-    if not isinstance(season, list):
-        if season is not None:
-            raise TypeError("Season must be a list for query purposes")
-    else:
-        for year in season:
-            if year < 2012 or year > 2017:
-                raise ValueError("Years must be within the range 2012-2017")
 
 
 def team_check(team):
@@ -70,8 +68,18 @@ def team_check(team):
 
 
 def name_teams(test, nteams=None):
+    """
+    Team names for the datasets.
+
+    :param test: True for fabricated dataset.  Team names become letters
+    :param nteams: Number of teams
+    :return: Team names
+    """
+
+    # Return nba team names
     if test is False:
         return teams
+    # Assign letters of the alphabet as team names
     else:
         team_names = []
         for i in range(nteams):

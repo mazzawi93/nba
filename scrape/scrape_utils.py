@@ -120,15 +120,19 @@ def stat_distribution(url):
 
             check = True
 
+            # A player scored
             if "makes" in stat.text:
 
+                # Get player name/id
                 player = (stat.find('a')['href'])
                 player = player.rsplit('/', 1)[-1].rsplit('.', 1)[0]
                 score['player'] = player
 
+                # Record if there was an assist
                 if 'assist' in stat.text:
                     score['assist'] = 1
 
+                # Determine the type of basket scored
                 if '3-pt' in stat.text:
                     score['points'] = 3
                     score['fgm'] = 1
@@ -142,12 +146,16 @@ def stat_distribution(url):
                     score['points'] = 1
                     score['ftm'] = 1
                     score['fta'] = 1
+
+            # Player missed a shot
             elif "misses" in stat.text:
 
+                # Get player name/id
                 player = (stat.find('a')['href'])
                 player = player.rsplit('/', 1)[-1].rsplit('.', 1)[0]
                 score['player'] = player
 
+                # Determine type of shot missed
                 if '3-pt' in stat.text:
                     score['fga'] = 1
                     score['fg3a'] = 1
@@ -155,6 +163,8 @@ def stat_distribution(url):
                     score['fga'] = 1
                 elif 'free' in stat.text:
                     score['fta'] = 1
+
+            # Account for other basketball stats
             elif "Defensive rebound" in stat.text:
                 if 'Team' not in stat.text:
                     score['drb'] = 1
@@ -172,6 +182,7 @@ def stat_distribution(url):
             else:
                 check = False
 
+            # Determine if home or away
             if score:
 
                 if check is True:
@@ -180,6 +191,7 @@ def stat_distribution(url):
                     elif x == 6:
                         score['home'] = 1
 
+            # Different quarters including multiple overtimes
             if pattern.match(stat.text):
                 if quarter == 2:
                     date = datetime.strptime("12:00", "%M:%S")
@@ -196,6 +208,8 @@ def stat_distribution(url):
                 else:
                     date = datetime.strptime("1:03:00", "%H:%M:%S")
 
+                # Adjust the time to be the total from the start of the game
+                # as the times begin from the start of each quarter/overtime
                 time = datetime.strptime(stat.text[:-2], "%M:%S")
                 time = date - time
                 time = divmod(time.days * 86400 + time.seconds, 60)

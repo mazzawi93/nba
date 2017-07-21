@@ -111,12 +111,3 @@ def decision_tree(data):
     dtc.fit(data['train']['x'], data['train']['y'])
     print("%s - Decision Trees" % dtc.score(data['test']['x'], data['test']['y']))
 
-
-
-
-df = split_game_data()
-naive_bayes(df)
-k_nearest_neighbours(df)
-support_vector_machine(df)
-decision_tree(df)
-

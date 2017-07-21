@@ -1,5 +1,4 @@
 import string
-
 import re
 import requests
 from bs4 import BeautifulSoup
@@ -87,7 +86,7 @@ def get_active_players():
 def get_player_stats(player):
     """ Scrape a player's yearly stats"""
 
-    # TODO: Add a player's advanced stats, right now it is only per game
+    # TODO: Add a player's advanced stats, right now it is only basic stats per game
 
     url = "http://www.basketball-reference.com" + player['url']
 
