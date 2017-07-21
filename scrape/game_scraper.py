@@ -4,10 +4,6 @@ import requests
 from bs4 import BeautifulSoup
 from pymongo import MongoClient
 
-teams = ['ATL', 'BOS', 'BRK', 'CHO', 'CHI', 'CLE', 'DAL', 'DEN', 'DET', 'GSW', 'HOU', 'IND', 'LAC', 'LAL',
-         'MEM', 'MIA', 'MIL', 'MIN', 'NOP', 'NYK', 'OKC', 'ORL', 'PHI', 'PHO', 'POR', 'SAC', 'SAS', 'TOR',
-         'UTA', 'WAS']
-
 full_teams = ['Atlanta Hawks', 'Boston Celtics', 'Brooklyn Nets', 'Charlotte Hornets', 'Chicago Bulls',
               'Cleveland Cavaliers', 'Dallas Mavericks', 'Denver Nuggets', 'Detroit Pistons',
               'Golden State Warriors', 'Houston Rockets', 'Indiana Pacers', 'Los Angeles Clippers',
@@ -233,13 +229,14 @@ def betting_lines(year):
                           {'$set': {'bet.home': home, 'bet.away': away}})
 
 
-def scrape_all(self):
+def scrape_all(start_year, end_year):
     """
     Iterate through each team and year to get season game logs and yearly stats
     """
+    teams = scrape_utils.team_names()
 
-    for team in self.teams:
-        self.team_season_stats(team)
-        for year in self.years:
+    for team in teams:
+        team_season_stats(team)
+        for year in range(start_year, end_year+1):
             print("%s (%s)" % (team, year))
-            self.season_game_logs(team, year)
+            season_game_logs(team, year)
