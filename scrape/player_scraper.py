@@ -135,3 +135,15 @@ def get_player_stats(player):
             player_stats[season_year]['per_g'] = season
 
     return player_stats
+
+
+def player_box_score(url):
+    """
+    Scrape player stats from a game's box score and store them in MongoDB
+
+    :param url: Basketball Reference Box Score URL
+    """
+
+    # Request
+    r = requests.get(url)
+    soup = BeautifulSoup(r.content, "html.parser")
