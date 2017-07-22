@@ -3,6 +3,8 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
+from db import mongo_utils
+
 
 def get_starting_lineups(team, year):
     """
@@ -135,3 +137,69 @@ def get_player_stats(player):
             player_stats[season_year]['per_g'] = season
 
     return player_stats
+
+
+def player_box_score(game_id):
+    """
+    Scrape all player stats from a specific game and store in Mongo
+
+    :param game_id: MongoDB and Basketball Reference game id
+    """
+
+    # HTML Content
+    r = requests.get('https://www.basketball-reference.com/boxscores/' + game_id + '.html')
+    soup = BeautifulSoup(r.content, "html.parser")
+
+    # MongoDB Collection
+    mongo = mongo_utils.MongoDB()
+
+    # The ids of the tables have team names in them
+    table_id = re.compile('^box_[a-z]{3}_basic$')
+
+    box_score = {
+        'home' : {},
+        'away' : {}
+    }
+
+    team = 'home'
+
+    for table in soup.find_all(id=table_id):
+        sub_table = table.find('tbody')
+
+        for player in sub_table.find_all('tr', {'class': None}):
+
+            player_stats = {}
+
+            # Player ID
+            player_id = player.find('th')
+            player_id = player_id['data-append-csv']
+
+            # Loop through each stat
+            for stat in player.find_all('td'):
+                try:
+                    if len(stat.string) < 3:
+                        player_stats[stat['data-stat']] = int(stat.string)
+                    elif stat.string[0] == '.' or stat.string[1] == '.':
+                        player_stats[stat['data-stat']] = float(stat.string)
+                    # Convert minutes string into seconds for simplicity
+                    elif stat['data-stat'] == 'mp':
+
+                        # Add 0 if minutes are single digits
+                        if len(stat.string) == 4:
+                            stat.string = '0' + stat.string
+
+                        # Minutes to seconds
+                        player_stats[stat['data-stat']] = int(stat.string[0:2]) * 60 + int(stat.string[3:5])
+                    else:
+                        player_stats[stat['data-stat']] = stat.string
+                except TypeError:
+                    player_stats[stat['data-stat']] = 0
+
+            # If this key exists it means the player did not play
+            if 'reason' not in player_stats:
+                box_score[team][player_id] = player_stats
+
+        team = 'away'
+
+    # Insert into database
+    mongo.insert('player_box_score', box_score)

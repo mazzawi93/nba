@@ -57,6 +57,7 @@ def season_game_logs(team, year):
         team = scrape_utils.rename_team(team)
         stats['opp_id'] = scrape_utils.rename_team(stats['opp_id'])
 
+        # TODO: Shorten this using regex
         # Separate the two teams' stats to keep them consistent for Mongo
         team1 = {
             'team': team,
@@ -140,11 +141,13 @@ def play_by_play(game_id):
     }
 
     quarter = 0
+    pattern = re.compile('^[0-9]{1,3}:[0-9]{2}\.[0-9]{1}$')
+
     for item in table:
 
         time = None
         x = 0
-        pattern = re.compile('^[0-9]{1,3}:[0-9]{2}\.[0-9]{1}$')
+
         play = {}
 
         # Iterate through row of stats, each row has 6 columns one half for each team
@@ -298,16 +301,3 @@ def betting_lines(year):
         # Add the betting line to the database
         collection.update({'home.team': team[hi], 'away.team': team[ai], 'date': date},
                           {'$set': {'bet.home': home, 'bet.away': away}})
-
-
-def scrape_all(start_year, end_year):
-    """
-    Iterate through each team and year to get season game logs and yearly stats
-    """
-    teams = scrape_utils.team_names()
-
-    for team in teams:
-        team_season_stats(team)
-        for year in range(start_year, end_year + 1):
-            print("%s (%s)" % (team, year))
-            season_game_logs(team, year)
