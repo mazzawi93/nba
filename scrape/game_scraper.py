@@ -1,5 +1,6 @@
 from datetime import datetime
 
+import re
 import requests
 from bs4 import BeautifulSoup
 from pymongo import MongoClient
@@ -24,7 +25,6 @@ def season_game_logs(team, year):
     :param team: Team to scrape
     :param year: Season in year
     :raise ValueError: If year exceeds NBA season ranges
-
     """
 
     # Check year value
@@ -118,10 +118,100 @@ def season_game_logs(team, year):
         # Insert into database
         mongo.insert('game_log', result)
 
-        # box_score = game.find('a')
+        # URL segment for more in depth game stats
+        box_score = game.find('a')
+
         # bs_url = 'http://www.basketball-reference.com/boxscores' + box_score['href'][-18:]
-        # pbp_url = 'http://www.basketball-reference.com/boxscores/pbp' + box_score['href'][-18:]
-        # pbp_stats = scrape_utils.stat_distribution(pbp_url)
+        pbp_url = 'http://www.basketball-reference.com/boxscores/pbp' + box_score['href'][-18:]
+        play_by_play(mongo, pbp_url, result['_id'])
+
+
+def play_by_play(mongo, url, game_id):
+    """
+    Analyze the time stamps of a game for all it's statistics
+
+    :param game_id: MongoDB id corresponsing to game log
+    :param mongo: Custom MongoDB class
+    :param url: The URL of the game for the play by play
+    """
+
+    # HTML Content
+    r = requests.get(url)
+    soup = BeautifulSoup(r.content, "html.parser")
+    table = soup.find(id='pbp').find_all('tr')
+
+    pbp = {
+        '_id': game_id,
+        'home': [],
+        'away': [],
+    }
+
+    quarter = 0
+    for item in table:
+        time = None
+
+        x = 0
+
+        pattern = re.compile('^[0-9]{1,3}:[0-9]{2}\.[0-9]{1}$')
+
+        play = {}
+        for stat in item.find_all('td'):
+
+            x += 1
+
+            check = True
+
+            # A player scored
+            if "makes" in stat.text:
+                scrape_utils.field_goal_update(stat.find('a')['href'], stat.text, play, True)
+            # Player missed a shot
+            elif "misses" in stat.text:
+                scrape_utils.field_goal_update(stat.find('a')['href'], stat.text, play, False)
+            # Account for other basketball stats
+            elif "Defensive rebound" in stat.text:
+                if 'Team' not in stat.text:
+                    play['drb'] = 1
+            elif "Offensive rebound" in stat.text:
+                if 'Team' not in stat.text:
+                    play['orb'] = 1
+            elif "Turnover" in stat.text:
+                play['turnover'] = 1
+            elif "foul" in stat.text:
+                play['foul'] = 1
+            elif "timeout" in stat.text:
+                play['timeout'] = 1
+            elif "enters" in stat.text:
+                play['sub'] = 1
+            else:
+                check = False
+
+            # Determine if home or away
+            if check is True:
+                if x == 2:
+                    play['home'] = 0
+                elif x == 6:
+                    play['home'] = 1
+
+            # Different quarters including multiple overtimes
+            if pattern.match(stat.text):
+                time = scrape_utils.play_time(quarter, stat.text[:-2])
+
+        if play:
+            play['time'] = time
+
+            if play['home'] == 1:
+                del play['home']
+                pbp['home'].append(play)
+            else:
+                del play['home']
+                pbp['away'].append(play)
+
+        # Going to next quarter
+        if time is None:
+            quarter += 1
+
+    # Insert into database
+    mongo.insert('play_by_play', pbp)
 
 
 def team_season_stats(team):

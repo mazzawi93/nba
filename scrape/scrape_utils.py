@@ -1,6 +1,4 @@
 from datetime import datetime
-
-import re
 import requests
 from bs4 import BeautifulSoup
 
@@ -86,147 +84,71 @@ def determine_home_win(location, result):
             return -1
 
 
-def stat_distribution(url):
+def field_goal_update(player, stat, play, make):
     """
-    Analyze the time stamps of a game for all it's statistics
-    :param url: The URL of the game for the time stamps
-    :return: Dict containing time of each stat in a game
+    Update the parameters depending on the shot
+    :param player: NBA player
+    :param stat: Statistic in game
+    :param play: Play dict
+    :param make: True for successful shot
+    :return:
+    """
+    # Get player name/id
+    play['player'] = player.rsplit('/', 1)[-1].rsplit('.', 1)[0]
+
+    # Record if there was an assist
+    if 'assist' in stat:
+        play['assist'] = 1
+
+    # Determine the type of basket scored
+    if '3-pt' in stat:
+        if make:
+            play['points'] = 3
+            play['fgm'] = 1
+            play['fg3m'] = 1
+        play['fga'] = 1
+        play['fg3a'] = 1
+    elif '2-pt' in stat:
+        if make:
+            play['points'] = 2
+            play['fgm'] = 1
+        play['fga'] = 1
+    elif 'free' in stat:
+        if make:
+            play['points'] = 1
+            play['ftm'] = 1
+        play['fta'] = 1
+
+
+def play_time(quarter, time_text):
+    """
+    Determine the exact time a play happens in a play by play log.
+    The times start at 0 from each quarter but the overall time is wanted.
+
+    :param quarter: Nba quarter
+    :param time_text: Time stamp
+    :return: Total time
     """
 
-    # Request
-    r = requests.get(url)
-    soup = BeautifulSoup(r.content, "html.parser")
+    # There are two blank rows between quarters
+    if quarter == 2:
+        base = datetime.strptime("12:00", "%M:%S")
+    elif quarter == 4:
+        base = datetime.strptime("24:00", "%M:%S")
+    elif quarter == 6:
+        base = datetime.strptime("36:00", "%M:%S")
+    elif quarter == 8:
+        base = datetime.strptime("48:00", "%M:%S")
+    elif quarter == 10:
+        base = datetime.strptime("53:00", "%M:%S")
+    elif quarter == 12:
+        base = datetime.strptime("58:00", "%M:%S")
+    else:
+        base = datetime.strptime("1:03:00", "%H:%M:%S")
 
-    # Play by play table
-    table = soup.find(id='pbp').find_all('tr')
-
-    stat_dist = {
-        'home': [],
-        'away': [],
-    }
-
-    quarter = 0
-    for item in table:
-        time = None
-
-        x = 0
-
-        pattern = re.compile('^[0-9]{1,3}:[0-9]{2}\.[0-9]{1}$')
-
-        score = {}
-        for stat in item.find_all('td'):
-
-            x += 1
-
-            check = True
-
-            # A player scored
-            if "makes" in stat.text:
-
-                # Get player name/id
-                player = (stat.find('a')['href'])
-                player = player.rsplit('/', 1)[-1].rsplit('.', 1)[0]
-                score['player'] = player
-
-                # Record if there was an assist
-                if 'assist' in stat.text:
-                    score['assist'] = 1
-
-                # Determine the type of basket scored
-                if '3-pt' in stat.text:
-                    score['points'] = 3
-                    score['fgm'] = 1
-                    score['fg3m'] = 1
-                    score['fga'] = 1
-                elif '2-pt' in stat.text:
-                    score['points'] = 2
-                    score['fgm'] = 1
-                    score['fga'] = 1
-                elif 'free' in stat.text:
-                    score['points'] = 1
-                    score['ftm'] = 1
-                    score['fta'] = 1
-
-            # Player missed a shot
-            elif "misses" in stat.text:
-
-                # Get player name/id
-                player = (stat.find('a')['href'])
-                player = player.rsplit('/', 1)[-1].rsplit('.', 1)[0]
-                score['player'] = player
-
-                # Determine type of shot missed
-                if '3-pt' in stat.text:
-                    score['fga'] = 1
-                    score['fg3a'] = 1
-                elif '2-pt' in stat.text:
-                    score['fga'] = 1
-                elif 'free' in stat.text:
-                    score['fta'] = 1
-
-            # Account for other basketball stats
-            elif "Defensive rebound" in stat.text:
-                if 'Team' not in stat.text:
-                    score['drb'] = 1
-            elif "Offensive rebound" in stat.text:
-                if 'Team' not in stat.text:
-                    score['orb'] = 1
-            elif "Turnover" in stat.text:
-                score['turnover'] = 1
-            elif "foul" in stat.text:
-                score['foul'] = 1
-            elif "timeout" in stat.text:
-                score['timeout'] = 1
-            elif "enters" in stat.text:
-                score['sub'] = 1
-            else:
-                check = False
-
-            # Determine if home or away
-            if score:
-
-                if check is True:
-                    if x == 2:
-                        score['home'] = 0
-                    elif x == 6:
-                        score['home'] = 1
-
-            # Different quarters including multiple overtimes
-            if pattern.match(stat.text):
-                if quarter == 2:
-                    date = datetime.strptime("12:00", "%M:%S")
-                elif quarter == 4:
-                    date = datetime.strptime("24:00", "%M:%S")
-                elif quarter == 6:
-                    date = datetime.strptime("36:00", "%M:%S")
-                elif quarter == 8:
-                    date = datetime.strptime("48:00", "%M:%S")
-                elif quarter == 10:
-                    date = datetime.strptime("53:00", "%M:%S")
-                elif quarter == 12:
-                    date = datetime.strptime("58:00", "%M:%S")
-                else:
-                    date = datetime.strptime("1:03:00", "%H:%M:%S")
-
-                # Adjust the time to be the total from the start of the game
-                # as the times begin from the start of each quarter/overtime
-                time = datetime.strptime(stat.text[:-2], "%M:%S")
-                time = date - time
-                time = divmod(time.days * 86400 + time.seconds, 60)
-                time = time[0] + time[1] / 60
-                time = round(time, 2)
-
-        if score:
-            score['time'] = time
-
-            if score['home'] == 1:
-                del score['home']
-                stat_dist['home'].append(score)
-            else:
-                del score['home']
-                stat_dist['away'].append(score)
-
-        if time is None:
-            quarter += 1
-
-    return stat_dist
+    # Adjust the time
+    time = datetime.strptime(time_text, "%M:%S")
+    time = base - time
+    time = divmod(time.days * 86400 + time.seconds, 60)
+    time = time[0] + time[1] / 60
+    return round(time, 2)
