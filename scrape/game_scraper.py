@@ -100,9 +100,11 @@ def season_game_logs(team, year):
             'pf': int(stats['opp_pf'])
         }
 
+        # Use the same ID as basketball reference
         result = {'date': datetime.strptime(stats['date_game'], "%Y-%m-%d"),
                   'season': year,
-                  'result': scrape_utils.determine_home_win(stats['game_location'], stats['game_result'])}
+                  'result': scrape_utils.determine_home_win(stats['game_location'], stats['game_result']),
+                  '_id': game.find('a')['href'][-17:-5]}
 
         # Place the teams in the correct spot depending on who is the home team
         if stats['game_location'] is None:
@@ -112,33 +114,24 @@ def season_game_logs(team, year):
             result['home'] = team2
             result['away'] = team1
 
-        # Unique ID is home+away+date
-        result['_id'] = result['home']['team'] + result['away']['team'] + result['date'].strftime('%d%m%Y')
-
         # Insert into database
         mongo.insert('game_log', result)
 
-        # URL segment for more in depth game stats
-        box_score = game.find('a')
 
-        # bs_url = 'http://www.basketball-reference.com/boxscores' + box_score['href'][-18:]
-        pbp_url = 'http://www.basketball-reference.com/boxscores/pbp' + box_score['href'][-18:]
-        play_by_play(mongo, pbp_url, result['_id'])
-
-
-def play_by_play(mongo, url, game_id):
+def play_by_play(game_id):
     """
     Analyze the time stamps of a game for all it's statistics
 
-    :param game_id: MongoDB id corresponsing to game log
-    :param mongo: Custom MongoDB class
-    :param url: The URL of the game for the play by play
+    :param game_id: NBA Game id from MongoDB and Basketball Reference
     """
 
     # HTML Content
-    r = requests.get(url)
+    r = requests.get('https://www.basketball-reference.com/boxscores/pbp/' + game_id + '.html')
     soup = BeautifulSoup(r.content, "html.parser")
     table = soup.find(id='pbp').find_all('tr')
+
+    # MongoDB Collection
+    mongo = mongo_utils.MongoDB()
 
     pbp = {
         '_id': game_id,
@@ -148,13 +141,13 @@ def play_by_play(mongo, url, game_id):
 
     quarter = 0
     for item in table:
+
         time = None
-
         x = 0
-
         pattern = re.compile('^[0-9]{1,3}:[0-9]{2}\.[0-9]{1}$')
-
         play = {}
+
+        # Iterate through row of stats, each row has 6 columns one half for each team
         for stat in item.find_all('td'):
 
             x += 1

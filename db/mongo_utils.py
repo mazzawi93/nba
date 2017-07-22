@@ -4,8 +4,8 @@ from pymongo import errors
 
 class MongoDB:
     def __init__(self):
-        client = MongoClient()
-        self.db = client.basketball
+        self.client = MongoClient()
+        self.db = self.client.basketball
 
     def insert(self, collection, doc):
         """
@@ -22,3 +22,6 @@ class MongoDB:
     def count(self, collection, criteria=None):
 
         return self.db[collection].count(criteria)
+
+    def __del__(self):
+        self.client.close()
