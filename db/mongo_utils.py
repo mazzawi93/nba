@@ -23,5 +23,9 @@ class MongoDB:
 
         return self.db[collection].count(criteria)
 
+    def find(self, collection, query=None, projection=None):
+
+        return self.db[collection].find(query, projection)
+
     def __del__(self):
         self.client.close()

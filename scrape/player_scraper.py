@@ -4,6 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from db import mongo_utils
+from scrape import scrape_utils
 
 
 def get_starting_lineups(team, year):
@@ -157,8 +158,8 @@ def player_box_score(game_id):
     table_id = re.compile('^box_[a-z]{3}_basic$')
 
     box_score = {
-        'home' : {},
-        'away' : {}
+        'home': {},
+        'away': {}
     }
 
     team = 'home'
@@ -176,24 +177,7 @@ def player_box_score(game_id):
 
             # Loop through each stat
             for stat in player.find_all('td'):
-                try:
-                    if len(stat.string) < 3:
-                        player_stats[stat['data-stat']] = int(stat.string)
-                    elif stat.string[0] == '.' or stat.string[1] == '.':
-                        player_stats[stat['data-stat']] = float(stat.string)
-                    # Convert minutes string into seconds for simplicity
-                    elif stat['data-stat'] == 'mp':
-
-                        # Add 0 if minutes are single digits
-                        if len(stat.string) == 4:
-                            stat.string = '0' + stat.string
-
-                        # Minutes to seconds
-                        player_stats[stat['data-stat']] = int(stat.string[0:2]) * 60 + int(stat.string[3:5])
-                    else:
-                        player_stats[stat['data-stat']] = stat.string
-                except TypeError:
-                    player_stats[stat['data-stat']] = 0
+                player_stats[stat['data-stat']] = scrape_utils.stat_parse(stat['data-stat'], stat.string)
 
             # If this key exists it means the player did not play
             if 'reason' not in player_stats:

@@ -44,76 +44,47 @@ def season_game_logs(team, year):
     # MongoDB Collection
     mongo = mongo_utils.MongoDB()
 
+    # To find opponent statistics
+    opponent = re.compile('^opp_.*$')
+
     # Loop through every game in a team's season
     for game in games.find_all('tr', {'class': None}):
 
-        stats = {}
+        curr_team = {'team': team}
+        opp_team = {}
 
         # Loop through each stat
         for stat in game.find_all('td'):
-            stats[stat['data-stat']] = stat.string
+
+            stat_name = stat['data-stat']
+
+            # These are opponent stats
+            if re.match(opponent, stat_name):
+                opp_team[stat_name[4:]] = scrape_utils.stat_parse(stat_name, stat.string)
+            else:
+                curr_team[stat_name] = scrape_utils.stat_parse(stat_name, stat.string)
+
+        # Remove unnecessary information
+        del curr_team['game_season']
+        del curr_team['x']
 
         # Rename relocated teams
-        team = scrape_utils.rename_team(team)
-        stats['opp_id'] = scrape_utils.rename_team(stats['opp_id'])
-
-        # TODO: Shorten this using regex
-        # Separate the two teams' stats to keep them consistent for Mongo
-        team1 = {
-            'team': team,
-            'pts': int(stats['pts']),
-            'fg': int(stats['fg']),
-            'fga': int(stats['fga']),
-            'fg_pct': float(stats['fg_pct']),
-            'fg3': int(stats['fg3']),
-            'fg3a': int(stats['fg3a']),
-            'fg3_pct': float(stats['fg3_pct']),
-            'ft': int(stats['ft']),
-            'fta': int(stats['fta']),
-            'ft_pct': float(stats['ft_pct']),
-            'orb': int(stats['orb']),
-            'trb': int(stats['trb']),
-            'ast': int(stats['ast']),
-            'stl': int(stats['stl']),
-            'blk': int(stats['blk']),
-            'tov': int(stats['tov']),
-            'pf': int(stats['pf'])
-        }
-
-        team2 = {
-            'team': stats['opp_id'],
-            'pts': int(stats['opp_pts']),
-            'fg': int(stats['opp_fg']),
-            'fga': int(stats['opp_fga']),
-            'fg_pct': float(stats['opp_fg_pct']),
-            'fg3': int(stats['opp_fg3']),
-            'fg3a': int(stats['opp_fg3a']),
-            'fg3_pct': float(stats['opp_fg3_pct']),
-            'ft': int(stats['opp_ft']),
-            'fta': int(stats['opp_fta']),
-            'ft_pct': float(stats['opp_ft_pct']),
-            'orb': int(stats['opp_orb']),
-            'trb': int(stats['opp_trb']),
-            'ast': int(stats['opp_ast']),
-            'stl': int(stats['opp_stl']),
-            'blk': int(stats['opp_blk']),
-            'tov': int(stats['opp_tov']),
-            'pf': int(stats['opp_pf'])
-        }
+        curr_team['team'] = scrape_utils.rename_team(team)
+        opp_team['team'] = scrape_utils.rename_team(opp_team.pop('id'))
 
         # Use the same ID as basketball reference
-        result = {'date': datetime.strptime(stats['date_game'], "%Y-%m-%d"),
+        result = {'date': datetime.strptime(curr_team.pop('date_game'), "%Y-%m-%d"),
                   'season': year,
-                  'result': scrape_utils.determine_home_win(stats['game_location'], stats['game_result']),
+                  'result': scrape_utils.determine_home_win(curr_team['game_location'], curr_team.pop('game_result')),
                   '_id': game.find('a')['href'][-17:-5]}
 
         # Place the teams in the correct spot depending on who is the home team
-        if stats['game_location'] is None:
-            result['home'] = team1
-            result['away'] = team2
+        if curr_team.pop('game_location') == 0:
+            result['home'] = curr_team
+            result['away'] = opp_team
         else:
-            result['home'] = team2
-            result['away'] = team1
+            result['home'] = opp_team
+            result['away'] = curr_team
 
         # Insert into database
         mongo.insert('game_log', result)

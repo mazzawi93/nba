@@ -68,11 +68,11 @@ def determine_home_win(location, result):
     if result != 'W' and result != 'L':
         raise ValueError('The game result is incorrect, must be W or L')
 
-    if location is not None and location != '@':
+    if location != 0 and location != '@':
         raise ValueError('Location is incorrectly entered')
 
     # Determine Home Winner
-    if location is None:
+    if location is 0:
         if result == 'W':
             return 1
         else:
@@ -152,3 +152,28 @@ def play_time(quarter, time_text):
     time = divmod(time.days * 86400 + time.seconds, 60)
     time = time[0] + time[1] / 60
     return round(time, 2)
+
+
+def stat_parse(stat_name, stat):
+    """
+    Parse a scraped stat to store the correct type
+    :param stat_name: Stat Name
+    :param stat: Stat Value
+    :return: the statistic in the correct type
+    """
+
+    try:
+        if len(stat) < 3:
+            return int(stat)
+        elif stat[0] == '.' or stat.string[1] == '.':
+            return float(stat)
+        elif stat_name == 'mp':
+            if len(stat) == 4:
+                stat = 0 + stat
+            return int(stat[0:2]) * 60 + int(stat[3:5])
+        else:
+            return stat
+    except TypeError:
+        return 0
+    except ValueError:
+        return stat
