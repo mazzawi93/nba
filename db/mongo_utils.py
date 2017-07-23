@@ -27,5 +27,9 @@ class MongoDB:
 
         return self.db[collection].find(query, projection)
 
+    def aggregate(self, collection, pipeline=None):
+
+        return self.db[collection].aggregate(pipeline, allowDiskUse=True)
+
     def __del__(self):
         self.client.close()

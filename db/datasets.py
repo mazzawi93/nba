@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from pymongo import MongoClient
 
-from db import process_utils
+from db import process_utils, mongo_utils
 
 
 def select_match(win_margin, ids, dr):
@@ -155,9 +155,7 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False):
     """
 
     # MongoDB
-    client = MongoClient()
-    db = client.basketball
-    collection = db.game_log
+    mongo = mongo_utils.MongoDB()
 
     fields = {
         'home': '$home.team',
@@ -183,7 +181,7 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False):
         {'$sort': {'date': 1}}
     ]
 
-    games = collection.aggregate(pipeline, allowDiskUse=True)
+    games = mongo.aggregate('game_log', pipeline)
 
     df = pd.DataFrame(list(games))
 

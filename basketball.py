@@ -271,7 +271,7 @@ class DixonColes(Basketball):
     Subclass for the Dixon and Coles model which uses the full time scores of each match.
     """
 
-    def __init__(self, test, season=None, month=None, nteams=4, ngames=4, nmargin=10):
+    def __init__(self, test, season=None, month=None, nteams=4, ngames=4, nmargin=10, xi=0):
         """
         Initialize DixonColes instance.  Can be a test dataset where the teams are structured from best to worst
         based on results or using NBA seasons.  If an ID is given, the abilities will be loaded from the database.
@@ -298,7 +298,7 @@ class DixonColes(Basketball):
         start = time.time()
 
         # Minimize the likelihood function
-        self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.nteams, 355, 0.015),
+        self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.nteams, 355, xi),
                             constraints=self.con, method='SLSQP')
 
         end = time.time()
@@ -329,6 +329,7 @@ class DixonColes(Basketball):
         opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.nteams, 355, xi),
                        constraints=self.con)
 
+        print(opt.x)
         # Determine the points of the Xi function
         for row in self.dataset.itertuples():
 
