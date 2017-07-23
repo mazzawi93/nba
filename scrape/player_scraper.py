@@ -1,4 +1,3 @@
-import string
 import re
 import requests
 from bs4 import BeautifulSoup
@@ -50,50 +49,14 @@ def get_starting_lineups(team, year):
     return lineups
 
 
-def get_active_players():
-    """ Get a list of all active NBA players (name and url to stats page) """
+def player_per_game(player):
+    """ Scrape a player's yearly per game stats"""
 
-    active_players = []
-
-    # Iterate through each letter of the alphabet
-    for letter in string.ascii_lowercase:
-        url = "http://www.basketball-reference.com/players/%s/" % letter
-        r = requests.get(url)
-        soup = BeautifulSoup(r.content, "html.parser")
-
-        # Not every letter is represented by a player
-        try:
-
-            # Player table
-            player_table = soup.find(id='players').find('tbody')
-
-            # Iterate through each player, active players have a <strong> tag
-            for player in player_table.find_all('tr'):
-
-                active = player.find('strong')
-
-                if active is not None:
-                    player_info = {
-                        'name': active.text,
-                        'url': active.find('a')['href']
-                    }
-
-                    active_players.append(player_info)
-
-        except Exception as e:
-            print(e)
-
-    return active_players
-
-
-def get_player_stats(player):
-    """ Scrape a player's yearly stats"""
-
-    # TODO: Add a player's advanced stats, right now it is only basic stats per game
-
-    url = "http://www.basketball-reference.com" + player['url']
+    # Mongo
+    mongo = mongo_utils.MongoDB()
 
     # Request
+    url = "http://www.basketball-reference.com" + player['url']
     r = requests.get(url)
     soup = BeautifulSoup(r.content, "html.parser")
 
@@ -128,16 +91,15 @@ def get_player_stats(player):
 
             # Each stat in a season (Per Game)
             for stat in year.find_all('td', {'data-stat': regex}):
-                season[stat['data-stat']] = stat.string
+                season[stat['data-stat']] = scrape_utils.stat_parse(stat['data-stat'], stat.string)
 
             for key in entries:
                 if key in season:
-                    player_stats[season_year][key] = season[key]
-                    del season[key]
+                    player_stats[season_year][key] = season.pop(key)
 
             player_stats[season_year]['per_g'] = season
 
-    return player_stats
+    mongo.insert('player_per_game', player_stats)
 
 
 def player_box_score(game_id):

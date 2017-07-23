@@ -193,9 +193,7 @@ def team_season_stats(team):
     soup = BeautifulSoup(r.content, "html.parser")
 
     # MongoDB Collection
-    client = MongoClient()
-    db = client.basketball
-    collection = db.team_season
+    mongo = mongo_utils.MongoDB()
 
     # Team's yearly stats are displayed in a table
     season_stats = soup.find(id='stats').find('tbody')
@@ -220,8 +218,7 @@ def team_season_stats(team):
             season.pop(k, None)
 
         # Add to MongoDB
-        if collection.find_one(season) is None:
-            collection.insert_one(season)
+        mongo.insert('team_season', season)
 
 
 def betting_lines(year):

@@ -1,3 +1,4 @@
+import string
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
@@ -28,6 +29,42 @@ def team_names():
         teams.append(team_name[7:10])
 
     return teams
+
+
+def get_active_players():
+    """ Get a list of all active NBA players (name and url to stats page) """
+
+    active_players = []
+
+    # Iterate through each letter of the alphabet
+    for letter in string.ascii_lowercase:
+        url = "http://www.basketball-reference.com/players/%s/" % letter
+        r = requests.get(url)
+        soup = BeautifulSoup(r.content, "html.parser")
+
+        # Not every letter is represented by a player
+        try:
+
+            # Player table
+            player_table = soup.find(id='players').find('tbody')
+
+            # Iterate through each player, active players have a <strong> tag
+            for player in player_table.find_all('tr'):
+
+                active = player.find('strong')
+
+                if active is not None:
+                    player_info = {
+                        'name': active.text,
+                        'url': active.find('a')['href']
+                    }
+
+                    active_players.append(player_info)
+
+        except Exception as e:
+            print(e)
+
+    return active_players
 
 
 def rename_team(team, year=None):
