@@ -200,7 +200,7 @@ def stat_parse(stat_name, stat):
     """
 
     try:
-        if len(stat) < 3 or stat_name == 'pts':
+        if len(stat) < 4:
             return int(stat)
         elif stat[0] == '.' or stat.string[1] == '.':
             return float(stat)
