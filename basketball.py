@@ -307,7 +307,7 @@ class DixonColes(Basketball):
         # Scipy minimization requires a numpy array for all abilities, so convert them to readable dict
         self.convert_abilities(self.opt.x, 0)
 
-    def find_time_param(self, xi):
+    def find_time_param(self):
         """
         In the Dixon and Coles model, they determine a weighting function to make sure more recent results are more
         relevant in the model.  The function they chose is exp(-Xi * t).  A larger value of Xi will give a higher weight
@@ -320,22 +320,14 @@ class DixonColes(Basketball):
         :return: Different time values
         """
 
-        # Initial Guess for the minimization
-        a0 = self.initial_guess(0)
-
         s = 0
 
-        # Minimize the likelihood function
-        opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.nteams, 355, xi),
-                       constraints=self.con)
-
-        print(opt.x)
         # Determine the points of the Xi function
         for row in self.dataset.itertuples():
 
             # Poisson Means
-            hmean = opt.x[row.home] * opt.x[row.away + self.nteams] * opt.x[self.nteams * 2]
-            amean = opt.x[row.away] * opt.x[row.home + self.nteams]
+            hmean = self.opt.x[row.home] * self.opt.x[row.away + self.nteams] * self.opt.x[self.nteams * 2]
+            amean = self.opt.x[row.away] * self.opt.x[row.home + self.nteams]
 
             # Calculate probabilities
             prob = 0
