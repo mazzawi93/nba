@@ -106,9 +106,8 @@ def play_by_play(game_id):
     mongo = mongo_utils.MongoDB()
 
     pbp = {
-        '_id': game_id,
         'home': [],
-        'away': [],
+        'away': []
     }
 
     quarter = 0
@@ -178,7 +177,7 @@ def play_by_play(game_id):
             quarter += 1
 
     # Insert into database
-    mongo.insert('play_by_play', pbp)
+    mongo.update('game_log', {'_id': game_id}, {'$set': {'pbp': pbp}})
 
 
 def team_season_stats(team):

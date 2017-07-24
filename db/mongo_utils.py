@@ -25,7 +25,14 @@ class MongoDB:
 
     def find(self, collection, query=None, projection=None):
 
-        return self.db[collection].find(query, projection)
+        if projection:
+            return self.db[collection].find(query, projection)
+        else:
+            return self.db[collection].find(query)
+
+    def update(self, collection, query, update):
+
+        return self.db[collection].update(query, update)
 
     def __del__(self):
         self.client.close()
