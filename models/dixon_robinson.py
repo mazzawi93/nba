@@ -45,10 +45,10 @@ def dixon_coles(params, games, nteams, week, time):
     hmean = params[games['home']] * params[games['away'] + nteams] * params[nteams * 2]
     amean = params[games['away']] * params[games['home'] + nteams]
 
-    likelihood = np.exp(-time * (week - games['week'])) * \
-                 (poisson.logpmf(games['hpts'], hmean) + poisson.logpmf(games['apts'], amean))
+    likelihood = poisson.logpmf(games['hpts'], hmean) + poisson.logpmf(games['apts'], amean)
+    weight = np.exp(-time * (week - games['week']))
 
-    return -np.sum(likelihood)
+    return -np.dot(likelihood, weight)
 
 
 def dixon_robinson(params, games, nteams, model):
