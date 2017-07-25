@@ -322,8 +322,10 @@ class DixonColes(Basketball):
 
         s = 0
 
+        dataset = datasets.dc_dataframe(self.teams, season=2017)
+
         # Determine the points of the Xi function
-        for row in self.dataset.itertuples():
+        for row in dataset.itertuples():
 
             # Poisson Means
             hmean = self.opt.x[row.home] * self.opt.x[row.away + self.nteams] * self.opt.x[self.nteams * 2]
@@ -369,7 +371,7 @@ class DixonRobinson(Basketball):
         if test:
             self.dataset = datasets.create_test_set(nteams, ngames, nmargin, True)
         else:
-            self.dataset = datasets.dr_dataframe(self.teams, season, month)
+            self.dataset = datasets.dr_dataframe(model, self.teams, season, month)
 
         # Initial Guess for the minimization
         a0 = self.initial_guess(model)

@@ -198,15 +198,13 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False):
         df['home'] = pd.Series(hi, index=df.index)
         df['away'] = pd.Series(ai, index=df.index)
 
-    # Remove unnecessary information
-    del df['_id']
     del df['season']
     del df['date']
 
     return df
 
 
-def dr_dataframe(teams=None, season=None, month=None, bet=False):
+def dr_dataframe(model=1, teams=None, season=None, month=None, bet=False):
     """
     Create and return a pandas dataframe for matches that includes the home and away team, and
     times for points scored.
@@ -219,55 +217,50 @@ def dr_dataframe(teams=None, season=None, month=None, bet=False):
     """
 
     # MongoDB
-    client = MongoClient()
-    db = client.basketball
-    collection = db.game_log
+    mongo = mongo_utils.MongoDB()
 
-    # Fields we need from mongoDB no matter what the search fields are
-    fields = {
-        'home': '$home.team',
-        'away': '$away.team',
-        'hpts': '$home.pts',
-        'apts': '$away.pts',
-        'date': 1,
-    }
+    df = dc_dataframe(teams, season, month, bet)
 
-    if bet:
-        fields['hbet'] = '$bet.home'
-        fields['abet'] = '$bet.away'
+    # Don't need week for Dixon Robinson
+    del df['week']
 
-    match = {}
+    if model > 1:
+        for team in ['home', 'away']:
 
-    # Prepare season value
-    process_utils.season_check(season, fields, match)
-    process_utils.month_check(month, fields, match)
+            # Fields we need from mongoDB no matter what the search fields are
+            fields = {
+                'date': 1,
+                'pbp': '$pbp.' + team
+            }
 
-    pipeline = [
-        {'$project': fields},
-        {'$match': match},
-        {'$sort': {'date': 1}}
-    ]
+            match = {}
 
-    games = collection.aggregate(pipeline, allowDiskUse=True)
+            # Prepare season value
+            process_utils.season_check(season, fields, match)
+            process_utils.month_check(month, fields, match)
 
-    df = pd.DataFrame(list(games))
+            group = {'_id': '$_id'}
 
-    if teams is not None:
-        hi = np.zeros(len(df), dtype=int)
-        ai = np.zeros(len(df), dtype=int)
+            for i in range(1, 5):
+                group[team + str(i)] = {'$sum':
+                                        {'$cond':
+                                             [{'$and':
+                                                   [{'$gte': ['$pbp.time', 12*i - 1]},
+                                                    {'$lt': ['$pbp.time', 12*i]}]
+                                               }, '$pbp.points', 0]}}
 
-        # Iterate through each game
-        for row in df.itertuples():
-            # Team indexes
-            hi[row.Index] = teams.index(row.home)
-            ai[row.Index] = teams.index(row.away)
 
-        df['home'] = pd.Series(hi, index=df.index)
-        df['away'] = pd.Series(ai, index=df.index)
+            pipeline = [
+                {'$project': fields},
+                {'$match': match},
+                {'$sort': {'date': 1}},
+                {'$unwind': '$pbp'},
+                {'$group': group}
+            ]
 
-    # Remove unnecessary information
-    del df['_id']
-    del df['season']
-    del df['date']
+            games = mongo.aggregate('game_log', pipeline)
+            games = pd.DataFrame(list(games))
+
+            df = df.merge(games, left_on='_id', right_on='_id', how='inner')
 
     return df

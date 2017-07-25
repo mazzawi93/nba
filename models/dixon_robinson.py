@@ -66,8 +66,24 @@ def dixon_robinson(params, games, nteams, model):
     hmean = params[games['home']] * params[games['away'] + nteams] * params[nteams * 2]
     amean = params[games['away']] * params[games['home'] + nteams]
 
-    likelihood = poisson.logpmf(games['hpts'], hmean) * games['hpts']
-    likelihood += poisson.logpmf(games['apts'], amean) * games['apts']
-    likelihood -= poisson.logpmf(games['hpts'], hmean) - poisson.logpmf(games['apts'], amean)
+    home_like = 0
+    away_like = 0
 
-    return -np.sum(likelihood)
+    if model > 1:
+
+        hpts = games['hpts'] - games['home1'] - games['home2'] - games['home3'] - games['home4']
+        apts = games['apts'] - games['away1'] - games['away2'] - games['away3'] - games['away4']
+
+        for i in range(1, 5):
+            home_like += np.dot(poisson.logpmf(games['hpts'], hmean * params[nteams * 2 + i]), games['home' + str(i)])
+            away_like += np.dot(poisson.logpmf(games['apts'], amean * params[nteams * 2 + i]), games['away' + str(i)])
+
+        home_like += np.dot(poisson.logpmf(games['hpts'], hmean), hpts)
+        away_like += np.dot(poisson.logpmf(games['apts'], amean), apts)
+    else:
+        home_like += np.dot(poisson.logpmf(games['hpts'], hmean), games['hpts'])
+        away_like += np.dot(poisson.logpmf(games['apts'], amean), games['apts'])
+
+    total_like = np.sum(poisson.logpmf(games['hpts'], hmean)) + np.sum(poisson.logpmf(games['apts'], amean))
+
+    return -(home_like + away_like - total_like)
