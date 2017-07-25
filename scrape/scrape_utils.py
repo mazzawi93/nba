@@ -200,14 +200,15 @@ def stat_parse(stat_name, stat):
     """
 
     try:
-        if len(stat) < 4:
+        if stat_name == 'mp':
+            if len(stat) == 4:
+                stat = '0' + stat
+            return int(stat[0:2]) * 60 + int(stat[3:5])
+        elif len(stat) < 4:
             return int(stat)
         elif stat[0] == '.' or stat.string[1] == '.':
             return float(stat)
-        elif stat_name == 'mp':
-            if len(stat) == 4:
-                stat = 0 + stat
-            return int(stat[0:2]) * 60 + int(stat[3:5])
+
         else:
             return stat
     except TypeError:

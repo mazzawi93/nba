@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 
 from db import mongo_utils
 from scrape import scrape_utils
+from datetime import datetime
 
 
 def get_starting_lineups(team, year):
@@ -12,8 +13,13 @@ def get_starting_lineups(team, year):
 
     :param team: NBA Team (Team abbreviation)
     :param year: NBA Season
-    :return: Dict containing date and starting lineup
     """
+
+    # MongoDB
+    mongo = mongo_utils.MongoDB()
+
+    # Rename team if relocated
+    team = scrape_utils.rename_team(team, year)
 
     # Starting Lineup URL
     url = "http://www.basketball-reference.com/teams/%s/%s_start.html" % (team, year)
@@ -23,30 +29,41 @@ def get_starting_lineups(team, year):
 
     soup = BeautifulSoup(r.content, "html.parser")
 
+    team = scrape_utils.rename_team(team)
+
     # Line up table
     lineup_table = soup.find(id='starting_lineups').find('tbody')
-
-    lineups = []
 
     # Iterate through each game
     for game in lineup_table.find_all('tr', {'class': None}):
 
-        # TODO: Convert Date datetime to be able to query mongodb
+        # Information to query mongodb to update collection
         date = game.find('td', {'data-stat': 'date_game'}).text
+        date = datetime.strptime(date, '%a, %b %d, %Y')
+        opponent = game.find('td', {'data-stat': 'opp_name'})
+        opponent = opponent.find('a')['href'][7:10]
 
-        lineup = {
-            'date': date,
-            'starters': []
-        }
+        # Determine home team for query
+        location = game.find('td', {'data-stat': 'game_location'}).text
+
+        lineup = []
+
+        if location == '@':
+            home = opponent
+            away = team
+            key = 'starters.away'
+        else:
+            home = team
+            away = opponent
+            key = 'starters.home'
 
         # Get the starting lineup
         starters = game.find('td', {'data-stat': 'game_starters'})
         for player in starters.find_all('a'):
-            lineup['starters'].append(player.text)
+            lineup.append(player['href'].rsplit('/', 1)[-1].rsplit('.', 1)[0])
 
-        lineups.append(lineup)
-
-    return lineups
+        # Update document
+        mongo.update('game_log', {'date': date, 'home.team': home, 'away.team': away}, {'$set': {key: lineup}})
 
 
 def player_per_game(player):
@@ -148,4 +165,4 @@ def player_box_score(game_id):
         team = 'away'
 
     # Insert into database
-    mongo.insert('player_box_score', box_score)
+    mongo.update('game_log', {'_id': game_id}, {'$set': {'players': box_score}})
