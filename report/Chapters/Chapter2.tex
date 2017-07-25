@@ -1,0 +1,28 @@
+\chapter{Background}
+
+In this chapter, all of the background knowledge required for the project will be discussed.
+
+This chapter will be a review for\cite{theoretical_stat}
+
+\section{Basketball}
+Basketball is a popular sport played by teams with 5 players on each side.  Seasons are played across two years, beginning in October and ending in April of the following year.  For the purposes of this paper, when a season is discussed for example the 2016 season, it will be in reference to the 2015-16 season.
+
+There are 5 positions in basketball with 3 main groups.  Centers, guards and forwards.
+
+When selecting a player for the fantasy football team, the positions will come under different scrutiny 
+
+\section{Modelling}
+This section will describe different techniques and review multiple research papers to provide the background for the analytics of this project.
+
+\subsection{Poisson Distribution}
+A discrete random variable X.  The probability mass function of X is given by: \cite{poisson}
+
+\begin{equation}
+    Pr(X = x) = \frac{e^{-\lambda}\lambda^{x}}{x!}, \qquad x=0,1,2,\ldots
+\end{equation}
+
+\subsection{Dixon and Coles}
+Dixon and Coles created a model with the aim of developing a profitable betting strategy for English football \cite{dixon_coles}.  The model assumes that the amount of goals scored by the home and away sides in any match are independent Poisson variables.  The means are determined by the attack and defence attributes of each side \cite{dixon_coles}.
+
+\subsection{Dixon and Robinson}
+Dixon and Robinson extended the previously discussed model by using the time each goal was scored instead of only the full time scores \cite{dixon_robinson}.  
