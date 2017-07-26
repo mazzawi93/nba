@@ -232,10 +232,10 @@ def betting_lines(year):
     soup = BeautifulSoup(open(url), "html.parser")
     table = soup.find('tbody')
 
+    teams = scrape_utils.team_names()
+
     # MongoDB Collection
-    client = MongoClient()
-    db = client.basketball
-    collection = db.game_log
+    mongo = mongo_utils.MongoDB()
 
     # Iterate through each game
     for game in table.find_all('tr'):
@@ -266,5 +266,7 @@ def betting_lines(year):
             i += 1
 
         # Add the betting line to the database
-        collection.update({'home.team': team[hi], 'away.team': team[ai], 'date': date},
-                          {'$set': {'bet.home': home, 'bet.away': away}})
+        query = {'home.team': scrape_utils.rename_team(teams[hi]), 'away.team': scrape_utils.rename_team(teams[ai]),
+                 'date': date}
+        update = {'$set': {'bet.home': home, 'bet.away': away}}
+        mongo.update('game_log', query, update)

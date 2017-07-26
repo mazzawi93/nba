@@ -345,6 +345,107 @@ class DixonColes(Basketball):
 
         return s
 
+    def test_adjusted(self):
+
+        adjusted_df = self.dataset.copy()
+        test = datasets.dc_dataframe(self.teams, season=2017, bet=True)
+
+        weeks_df = test.groupby('week')
+
+        a0 = self.initial_guess(0)
+
+        bankroll = 0
+
+        nbets, nwins = 0, 0
+        npredict, ntotal = 0, 0
+
+        abilities = []
+
+        for x in weeks_df.groups:
+
+            opt = minimize(dr.dixon_coles, x0=a0, args=(adjusted_df, self.nteams, x, 0.024),
+                           constraints=self.con, method='SLSQP')
+
+            abilities.append(opt)
+
+            week = weeks_df.get_group(x)
+
+            for row in week.itertuples():
+
+                # Bet on respective teams
+                hbet = False
+                abet = False
+
+                # Poisson Means
+                hmean = opt.x[row.home] * opt.x[row.away + self.nteams] * opt.x[self.nteams * 2]
+                amean = opt.x[row.away] * opt.x[row.home + self.nteams]
+
+                # Calculate probabilities
+                hprob, aprob = 0, 0
+                for h in range(60, 140):
+                    for a in range(60, 140):
+
+                        if h > a:
+                            hprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+                        elif h < a:
+                            aprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+
+                # Implied probability from betting lines (ie. 2.00 line means 50% chance they win)
+                hbp = 1 / row.hbet
+                abp = 1 / row.abet
+
+                # Determine if we should bet on the home and away team
+                if float(hprob) >= hbp:
+                    hbet = True
+                if float(aprob) >= abp:
+                    abet = True
+
+                # Determine prediction
+                if hprob >= aprob:
+                    predict = row.home
+                else:
+                    predict = row.away
+
+                if row.hpts > row.apts:
+                    winner = row.home
+
+                    if hbet:
+                        bankroll += row.hbet - 1
+                        nbets += 1
+                        nwins += 1
+
+                    if abet:
+                        bankroll -= 1
+                        nbets += 1
+
+                else:
+                    winner = row.away
+
+                    if hbet:
+                        bankroll -= 1
+                        nbets += 1
+
+                    if abet:
+                        bankroll += row.abet - 1
+                        nbets += 1
+                        nwins += 1
+
+                if predict == winner:
+                    npredict += 1
+
+                ntotal += 1
+
+            adjusted_df = adjusted_df.append(week, ignore_index=True)
+
+        print("Predicted: %d/%d\t\tPercentage: %.4f" % (npredict, ntotal, (npredict / ntotal)))
+        try:
+            print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (nbets, nwins, (nwins / nbets)))
+        except ZeroDivisionError:
+            print("No Bets")
+        print("Bankroll: %.2f" % bankroll)
+
+        return abilities
+
 
 class DixonRobinson(Basketball):
     """
