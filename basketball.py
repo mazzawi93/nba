@@ -298,7 +298,7 @@ class DixonColes(Basketball):
         start = time.time()
 
         # Minimize the likelihood function
-        self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.nteams, 355, xi),
+        self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.nteams, self.dataset['week'].max() + 28, xi),
                             constraints=self.con, method='SLSQP')
 
         end = time.time()
@@ -348,7 +348,8 @@ class DixonColes(Basketball):
     def test_adjusted(self):
 
         adjusted_df = self.dataset.copy()
-        test = datasets.dc_dataframe(self.teams, season=2017, bet=True)
+
+        test = datasets.dc_dataframe(self.teams, season=[2015,2016,2017], bet=True)
 
         weeks_df = test.groupby('week')
 
@@ -362,6 +363,8 @@ class DixonColes(Basketball):
         abilities = []
 
         for x in weeks_df.groups:
+
+            print(x)
 
             opt = minimize(dr.dixon_coles, x0=a0, args=(adjusted_df, self.nteams, x, 0.024),
                            constraints=self.con, method='SLSQP')
