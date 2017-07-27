@@ -361,7 +361,7 @@ class DixonColes(Basketball):
         original = self.dataset.copy()
 
         # The rest of the games to be gradually added to dataset
-        test = datasets.dc_dataframe(self.teams, season=[2015, 2016, 2017], bet=True)
+        test = datasets.dc_dataframe(self.teams, season=[2014, 2015, 2016, 2017], bet=True)
 
         # Group them by weeks
         weeks_df = test.groupby('week')
@@ -383,6 +383,7 @@ class DixonColes(Basketball):
                 date.add(row.date.to_pydatetime())
                 original = original.append(week, ignore_index=True)
 
+            print(date)
             abilities['min_date'] = min(date)
             abilities['max_date'] = max(date)
             mongo.insert('dixon', abilities)

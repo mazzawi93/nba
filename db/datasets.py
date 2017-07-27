@@ -262,3 +262,69 @@ def dr_dataframe(model=1, teams=None, season=None, month=None, bet=False):
             df = df.merge(games, left_on='_id', right_on='_id', how='inner')
 
     return df
+
+
+def player_dataframe(player, season=None):
+    """
+    Create a dataframe for player stats
+    :param player: player id
+    :param season: NBA Season
+    :return: Pandas DataFrame
+    """
+
+    # MongoDB
+    mongo = mongo_utils.MongoDB()
+
+    fields = {
+        'home': '$home.team',
+        'away': '$away.team',
+        'home_player': '$players.home.' + player + '.pts',
+        'away_player': '$players.away.' + player + '.pts',
+        'date': 1
+    }
+
+    match = {}
+
+    process_utils.season_check(season, fields, match)
+
+    pipeline = [
+        {'$project': fields},
+        {'$match': match},
+        {'$sort': {'date': 1}}
+    ]
+
+    games = mongo.aggregate('game_log', pipeline)
+
+    # Create DataFrame
+    df = pd.DataFrame(list(games))
+
+    # Drop games the player didn't play
+    df.dropna(subset=['away_player', 'home_player'], how='all', inplace=True)
+
+    # Determine if player was home or away
+    df['is_home'] = pd.notnull(df['home_player'])
+
+    # Combine points into one column
+    df.fillna(0, inplace=True)
+    df['points'] = df['away_player'] + df['home_player']
+    df.drop('away_player', 1, inplace=True)
+    df.drop('home_player', 1, inplace=True)
+
+    # Conver team names to Dixon Coles means
+    for row in df.itertuples():
+
+        a = mongo.find_one('dixon', {'min_date': {'$lte': row.date}, 'max_date': {'$gte': row.date}})
+
+        try:
+            df.set_value(row.Index, 'home', a[row.home]['att'] * a[row.away]['def'] * a['home'])
+            df.set_value(row.Index, 'away', a[row.away]['att'] * a[row.home]['def'])
+        except TypeError:
+            pass
+
+    # Drop irrelevant columns
+    try:
+        df.drop(['_id', 'date', 'season'], 1, inplace=True)
+    except ValueError:
+        df.drop(['_id', 'date'], 1, inplace=True)
+
+    return df

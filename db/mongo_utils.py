@@ -30,6 +30,12 @@ class MongoDB:
         else:
             return self.db[collection].find(query)
 
+    def find_one(self, collection, query=None, projection=None):
+        if projection:
+            return self.db[collection].find_one(query, projection)
+        else:
+            return self.db[collection].find_one(query)
+
     def update(self, collection, query, update):
 
         return self.db[collection].update(query, update)
