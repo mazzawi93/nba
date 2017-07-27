@@ -1,10 +1,11 @@
 import time
+from datetime import datetime
 
 import numpy as np
 from scipy.optimize import minimize
 from scipy.stats import poisson
 
-from db import datasets
+from db import datasets, mongo_utils
 from db import process_utils
 from models import dixon_robinson as dr
 
@@ -63,24 +64,24 @@ class Basketball:
         :param opt: Abilities from optimization
         :param model: Model number determines which parameters are included (0 is Dixon Coles)
         """
-        self.abilities = {'model': model}
+        abilities = {'model': model}
 
         i = 0
 
         # Attack and defense
         for team in self.teams:
-            self.abilities[team] = {
+            abilities[team] = {
                 'att': opt[i],
                 'def': opt[i + self.nteams]
             }
             i += 1
 
         # Home Advantage
-        self.abilities['home'] = opt[self.nteams * 2]
+        abilities['home'] = opt[self.nteams * 2]
 
         # Time parameters
         if model >= 2:
-            self.abilities['time'] = {
+            abilities['time'] = {
                 'q1': opt[self.nteams * 2 + 1],
                 'q2': opt[self.nteams * 2 + 2],
                 'q3': opt[self.nteams * 2 + 3],
@@ -89,16 +90,16 @@ class Basketball:
 
         # Team 4 min stretch for models 3 and 4
         if model == 3:
-            self.abilities['lambda'] = {
+            abilities['lambda'] = {
                 '+1': opt[self.nteams * 2 + 5],
                 '-1': opt[self.nteams * 2 + 6],
             }
-            self.abilities['mu'] = {
+            abilities['mu'] = {
                 '+1': opt[self.nteams * 2 + 7],
                 '-1': opt[self.nteams * 2 + 8]
             }
         elif model == 4:
-            self.abilities['lambda'] = {
+            abilities['lambda'] = {
                 '+1': opt[self.nteams * 2 + 5],
                 '-1': opt[self.nteams * 2 + 6],
                 '+2': opt[self.nteams * 2 + 11],
@@ -106,7 +107,7 @@ class Basketball:
                 '+3': opt[self.nteams * 2 + 9],
                 '-3': opt[self.nteams * 2 + 10],
             }
-            self.abilities['mu'] = {
+            abilities['mu'] = {
                 '+1': opt[self.nteams * 2 + 7],
                 '-1': opt[self.nteams * 2 + 8],
                 '+2': opt[self.nteams * 2 + 15],
@@ -116,8 +117,10 @@ class Basketball:
             }
 
         if model == 5:
-            self.abilities['time']['home'] = opt[self.nteams * 2 + 5]
-            self.abilities['time']['away'] = opt[self.nteams * 2 + 6]
+            abilities['time']['home'] = opt[self.nteams * 2 + 5]
+            abilities['time']['away'] = opt[self.nteams * 2 + 6]
+
+        return abilities
 
     def test_model(self, fake, season=None, month=None, display=False):
         """
@@ -298,14 +301,15 @@ class DixonColes(Basketball):
         start = time.time()
 
         # Minimize the likelihood function
-        self.opt = minimize(dr.dixon_coles, x0=a0, args=(self.dataset, self.nteams, self.dataset['week'].max() + 28, xi),
+        self.opt = minimize(dr.dixon_coles, x0=a0,
+                            args=(self.dataset, self.nteams, self.dataset['week'].max() + 28, xi),
                             constraints=self.con, method='SLSQP')
 
         end = time.time()
         print("Time: %f" % (end - start))
 
         # Scipy minimization requires a numpy array for all abilities, so convert them to readable dict
-        self.convert_abilities(self.opt.x, 0)
+        self.abilities = self.convert_abilities(self.opt.x, 0)
 
     def find_time_param(self):
         """
@@ -345,109 +349,43 @@ class DixonColes(Basketball):
 
         return s
 
-    def test_adjusted(self):
+    def dynamic_dixon_coles(self):
+        """
+        Computer the team abilities for every week by combining the datasets and using the time value
+        """
 
-        adjusted_df = self.dataset.copy()
+        # MongoDB
+        mongo = mongo_utils.MongoDB()
 
-        test = datasets.dc_dataframe(self.teams, season=[2015,2016,2017], bet=True)
+        # Original DC dataset
+        original = self.dataset.copy()
 
+        # The rest of the games to be gradually added to dataset
+        test = datasets.dc_dataframe(self.teams, season=[2015, 2016, 2017], bet=True)
+
+        # Group them by weeks
         weeks_df = test.groupby('week')
 
         a0 = self.initial_guess(0)
 
-        bankroll = 0
+        # Recalculate the Dixon Coles parameters every week after adding the previous week to the dataset
+        for t in weeks_df.groups:
 
-        nbets, nwins = 0, 0
-        npredict, ntotal = 0, 0
-
-        abilities = []
-
-        for x in weeks_df.groups:
-
-            print(x)
-
-            opt = minimize(dr.dixon_coles, x0=a0, args=(adjusted_df, self.nteams, x, 0.024),
+            opt = minimize(dr.dixon_coles, x0=a0, args=(original, self.nteams, t, 0.024),
                            constraints=self.con, method='SLSQP')
 
-            abilities.append(opt)
+            abilities = self.convert_abilities(opt.x, 0)
 
-            week = weeks_df.get_group(x)
+            week = weeks_df.get_group(t)
+            date = set()
 
             for row in week.itertuples():
+                date.add(row.date.to_pydatetime())
+                original = original.append(week, ignore_index=True)
 
-                # Bet on respective teams
-                hbet = False
-                abet = False
-
-                # Poisson Means
-                hmean = opt.x[row.home] * opt.x[row.away + self.nteams] * opt.x[self.nteams * 2]
-                amean = opt.x[row.away] * opt.x[row.home + self.nteams]
-
-                # Calculate probabilities
-                hprob, aprob = 0, 0
-                for h in range(60, 140):
-                    for a in range(60, 140):
-
-                        if h > a:
-                            hprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
-                        elif h < a:
-                            aprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
-
-                # Implied probability from betting lines (ie. 2.00 line means 50% chance they win)
-                hbp = 1 / row.hbet
-                abp = 1 / row.abet
-
-                # Determine if we should bet on the home and away team
-                if float(hprob) >= hbp:
-                    hbet = True
-                if float(aprob) >= abp:
-                    abet = True
-
-                # Determine prediction
-                if hprob >= aprob:
-                    predict = row.home
-                else:
-                    predict = row.away
-
-                if row.hpts > row.apts:
-                    winner = row.home
-
-                    if hbet:
-                        bankroll += row.hbet - 1
-                        nbets += 1
-                        nwins += 1
-
-                    if abet:
-                        bankroll -= 1
-                        nbets += 1
-
-                else:
-                    winner = row.away
-
-                    if hbet:
-                        bankroll -= 1
-                        nbets += 1
-
-                    if abet:
-                        bankroll += row.abet - 1
-                        nbets += 1
-                        nwins += 1
-
-                if predict == winner:
-                    npredict += 1
-
-                ntotal += 1
-
-            adjusted_df = adjusted_df.append(week, ignore_index=True)
-
-        print("Predicted: %d/%d\t\tPercentage: %.4f" % (npredict, ntotal, (npredict / ntotal)))
-        try:
-            print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (nbets, nwins, (nwins / nbets)))
-        except ZeroDivisionError:
-            print("No Bets")
-        print("Bankroll: %.2f" % bankroll)
-
-        return abilities
+            abilities['min_date'] = min(date)
+            abilities['max_date'] = max(date)
+            mongo.insert('dixon', abilities)
 
 
 class DixonRobinson(Basketball):
@@ -491,4 +429,4 @@ class DixonRobinson(Basketball):
         print("Time: %f" % (end - start))
 
         # Scipy minimization requires a numpy array for all abilities, so convert them to readable dict
-        self.convert_abilities(self.opt.x, model)
+        self.abilities = self.convert_abilities(self.opt.x, model)

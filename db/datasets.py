@@ -36,13 +36,13 @@ def select_match(win_margin, ids, dr):
         # TODO: Add point times
         pipeline = [
             {'$project': {
-                    'hpts': '$home.pts',
-                    'apts': '$away.pts',
-                    'hbet': '$bet.home',
-                    'abet': '$bet.away',
-                    'difference': {'$subtract': ['$home.pts', '$away.pts']}
+                'hpts': '$home.pts',
+                'apts': '$away.pts',
+                'hbet': '$bet.home',
+                'abet': '$bet.away',
+                'difference': {'$subtract': ['$home.pts', '$away.pts']}
 
-                }},
+            }},
             {'$match': match},
             {'$limit': 1}
         ]
@@ -199,7 +199,6 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False):
         df['away'] = pd.Series(ai, index=df.index)
 
     del df['season']
-    del df['date']
 
     return df
 
@@ -243,12 +242,11 @@ def dr_dataframe(model=1, teams=None, season=None, month=None, bet=False):
 
             for i in range(1, 5):
                 group[team + str(i)] = {'$sum':
-                                        {'$cond':
-                                             [{'$and':
-                                                   [{'$gte': ['$pbp.time', 12*i - 1]},
-                                                    {'$lt': ['$pbp.time', 12*i]}]
-                                               }, '$pbp.points', 0]}}
-
+                                            {'$cond':
+                                                 [{'$and':
+                                                       [{'$gte': ['$pbp.time', 12 * i - 1]},
+                                                        {'$lt': ['$pbp.time', 12 * i]}]
+                                                   }, '$pbp.points', 0]}}
 
             pipeline = [
                 {'$project': fields},

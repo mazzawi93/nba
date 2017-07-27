@@ -141,7 +141,7 @@ def player_box_score(game_id):
         'away': {}
     }
 
-    team = 'home'
+    team = 'away'
 
     for table in soup.find_all(id=table_id):
         sub_table = table.find('tbody')
@@ -162,7 +162,7 @@ def player_box_score(game_id):
             if 'reason' not in player_stats:
                 box_score[team][player_id] = player_stats
 
-        team = 'away'
+        team = 'home'
 
     # Insert into database
     mongo.update('game_log', {'_id': game_id}, {'$set': {'players': box_score}})
