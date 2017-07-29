@@ -27,7 +27,7 @@ def determine_probabilities(hmean, amean):
     return hprob, aprob
 
 
-def dixon_prediction(display=False):
+def dixon_prediction(season, abilities=None, display=False):
     """
     Dixon Coles or Robinson game prediction based off the team probabilities.
 
@@ -40,20 +40,20 @@ def dixon_prediction(display=False):
     mongo = mongo_utils.MongoDB()
 
     # Testing Dataset
-    test = datasets.dc_dataframe(season=2017)
+    test = datasets.dc_dataframe(season=season)
 
     ngames = np.zeros(100)
     ncorrect = np.zeros(100)
 
     date = None
-    abilities = None
 
     # Iterate through each game to determine the winner and prediction
     for row in test.itertuples():
 
-        if row.date != date:
-            date = row.date
-            abilities = mongo.find_one('dixon', {'min_date': {'$lte': date}, 'max_date': {'$gte': date}})
+        if abilities is None:
+            if row.date != date:
+                date = row.date
+                abilities = mongo.find_one('dixon', {'min_date': {'$lte': date}, 'max_date': {'$gte': date}})
 
         hmean = abilities[row.home]['att'] * abilities[row.away]['def'] * abilities['home']
         amean = abilities[row.away]['att'] * abilities[row.home]['def']

@@ -1,26 +1,13 @@
 import time
-from datetime import datetime
 
 import numpy as np
 from scipy.optimize import minimize
 from scipy.stats import poisson
 
-from db import datasets, mongo_utils
+from db import datasets
 from db import process_utils
 from models import dixon_robinson as dr
-
-
-def determine_probabilities(hmean, amean):
-    hprob, aprob = 0, 0
-    for h in range(60, 140):
-        for a in range(60, 140):
-
-            if h > a:
-                hprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
-            elif h < a:
-                aprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
-
-    return hprob, aprob
+from models.game_prediction import dixon_prediction
 
 
 class Basketball:
@@ -33,7 +20,6 @@ class Basketball:
         Initialize Basketball class by setting class variables
 
         :param season: NBA Season(s)
-        :param month: Calendar Month(s)
         """
 
         self.nteams = 30
@@ -45,14 +31,13 @@ class Basketball:
 
         self.abilities = None
 
-    def test_model(self, season=None, month=None, display=False):
+    def test_model(self, season=None, display=False):
         """
         Test the optimized model against a testing set and apply a betting strategy
 
         :param season: NBA Season(s)
-        :param month: Calendar month(s)
         :param display: Print the results as they happen
-        :return: Accuracy of the model
+        :return: Number of correct predictions and number of games by percentage
         """
 
         # If it is nba data we are working with get current season, else create a testing set with the same
@@ -60,100 +45,9 @@ class Basketball:
         if season is None:
             season = 2017
 
-        # Dixon Coles
-        if self.abilities['model'] == 0:
-            test = datasets.dc_dataframe(season=season, month=month, bet=True)
-        # Dixon Robinson
-        else:
-            test = datasets.dr_dataframe(season=season, month=month, bet=True)
+        ncorrect, ngames = dixon_prediction(season, self.abilities, display)
 
-        # Betting bankroll
-        bankroll = 0
-
-        # Predictions and bet wins
-        nbets, nwins = 0, 0
-        npredict, ntotal = 0, 0
-
-        for row in test.itertuples():
-
-            # Bet on respective teams
-            hbet = False
-            abet = False
-
-            # Poisson Means
-            hmean = self.abilities[row.home]['att'] * self.abilities[row.away]['def'] * self.abilities['home']
-            amean = self.abilities[row.home]['def'] * self.abilities[row.away]['att']
-
-            # Calculate probabilities
-            hprob, aprob = determine_probabilities(hmean, amean)
-
-            # Implied probability from betting lines (ie. 2.00 line means 50% chance they win)
-            hbp = 1 / row.hbet
-            abp = 1 / row.abet
-
-            # Determine if we should bet on the home and away team
-            if float(hprob) >= hbp:
-                hbet = True
-            if float(aprob) >= abp:
-                abet = True
-
-            # Determine prediction
-            if hprob >= aprob:
-                predict = row.home
-            else:
-                predict = row.away
-
-            # Determine accuracy and betting result
-            if row.hpts > row.apts:
-                winner = row.home
-
-                if hbet:
-                    bankroll += row.hbet - 1
-                    nbets += 1
-                    nwins += 1
-
-                if abet:
-                    bankroll -= 1
-                    nbets += 1
-
-            else:
-                winner = row.away
-
-                if hbet:
-                    bankroll -= 1
-                    nbets += 1
-
-                if abet:
-                    bankroll += row.abet - 1
-                    nbets += 1
-                    nwins += 1
-
-            if predict == winner:
-                npredict += 1
-
-            ntotal += 1
-
-            # Game by game summary
-            if display:
-                print("%s (%.2f): %.4f\t\t%s (%.2f): %.4f" % (
-                    row.home, row.hbet, hprob, row.away, row.abet, aprob))
-                print("Home Bet: %s\t\t\tAway Bet: %s\t\t" % (hbet, abet))
-                print("Predicted: %s\t\t\tWinner: %s\t\t\tPredictions: %d/%d\t\tPercentage: %.4f" % (
-                    predict, winner, npredict, ntotal, (npredict / ntotal)))
-                try:
-                    print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (nbets, nwins, (nwins / nbets)))
-                except ZeroDivisionError:
-                    print("No Bets")
-                print("Bankroll: %.2f" % bankroll)
-                print()
-
-        # Testing Summary
-        print("Predicted: %d/%d\t\tPercentage: %.4f" % (npredict, ntotal, (npredict / ntotal)))
-        try:
-            print("Number of bets: %d\t\tNum of wins: %d\t\tPercentage: %.4f" % (nbets, nwins, (nwins / nbets)))
-        except ZeroDivisionError:
-            print("No Bets")
-        print("Bankroll: %.2f" % bankroll)
+        return ncorrect, ngames
 
 
 class DixonColes(Basketball):
@@ -187,7 +81,7 @@ class DixonColes(Basketball):
         end = time.time()
         print("Time: %f" % (end - start))
 
-        # Scipy minimization requires a numpy array for all abilities, so convert them to readable dict
+        # SciPy minimization requires a numpy array for all abilities, so convert them to readable dict
         self.abilities = dr.convert_abilities(self.opt.x, 0, self.teams)
 
     def find_time_param(self):
@@ -260,5 +154,5 @@ class DixonRobinson(Basketball):
         end = time.time()
         print("Time: %f" % (end - start))
 
-        # Scipy minimization requires a numpy array for all abilities, so convert them to readable dict
+        # SciPy minimization requires a numpy array for all abilities, so convert them to readable dict
         self.abilities = dr.convert_abilities(self.opt.x, model, self.teams)
