@@ -28,40 +28,27 @@ class Basketball:
     Basketball class used to manipulate team abilities and simulate upcoming seasons
     """
 
-    def __init__(self, test, season=None, month=None, nteams=4, ngames=4, nmargin=10):
+    def __init__(self, season):
         """
         Initialize Basketball class by setting class variables
 
-        :param test: Fabricated Set
         :param season: NBA Season(s)
         :param month: Calendar Month(s)
-        :param nteams: Number of teams for test set
-        :param ngames: Number of games played between teams for test set
-        :param nmargin: Winning Margin in test set
         """
 
-        if test:
-            self.nteams = nteams
-            self.ngames = ngames
-            self.nmargin = nmargin
-
-        else:
-
-            self.nteams = 30
-            self.season = season
-            self.month = month
-
-        self.teams = process_utils.name_teams(test, nteams)
+        self.nteams = 30
+        self.season = season
+        self.teams = process_utils.name_teams(False, 30)
 
         self.con = [{'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)},
                     {'type': 'eq', 'fun': dr.defense_constraint, 'args': (1, self.nteams,)}]
 
         self.abilities = None
 
-    def test_model(self, fake, season=None, month=None, display=False):
+    def test_model(self, season=None, month=None, display=False):
         """
         Test the optimized model against a testing set and apply a betting strategy
-        :param fake:
+
         :param season: NBA Season(s)
         :param month: Calendar month(s)
         :param display: Print the results as they happen
@@ -73,16 +60,12 @@ class Basketball:
         if season is None:
             season = 2017
 
-        # Dixon model has different dataset
-        if fake:
-            test = datasets.create_test_set(self.nteams, self.ngames, self.nmargin)
+        # Dixon Coles
+        if self.abilities['model'] == 0:
+            test = datasets.dc_dataframe(season=season, month=month, bet=True)
+        # Dixon Robinson
         else:
-            # Dixon Coles
-            if self.abilities['model'] == 0:
-                test = datasets.dc_dataframe(season=season, month=month, bet=True)
-            # Dixon Robinson
-            else:
-                test = datasets.dr_dataframe(season=season, month=month, bet=True)
+            test = datasets.dr_dataframe(season=season, month=month, bet=True)
 
         # Betting bankroll
         bankroll = 0
@@ -178,25 +161,17 @@ class DixonColes(Basketball):
     Subclass for the Dixon and Coles model which uses the full time scores of each match.
     """
 
-    def __init__(self, test, season=None, month=None, nteams=4, ngames=4, nmargin=10, xi=0):
+    def __init__(self, season, xi=0):
         """
-        Initialize DixonColes instance.  Can be a test dataset where the teams are structured from best to worst
-        based on results or using NBA seasons.  If an ID is given, the abilities will be loaded from the database.
+        Initialize DixonColes instance.
 
-        :param test: Fabricated Set
         :param season: NBA Season(s)
-        :param month: Calendar Month(s)
-        :param nteams: Number of teams for test set
-        :param ngames: Number of games played between teams for test set
-        :param nmargin: Winning Margin in test set
+        :param xi: Recent match weight
         """
 
-        super().__init__(test, season, month, nteams, ngames, nmargin)
+        super().__init__(season)
 
-        if test:
-            self.dataset = datasets.create_test_set(nteams, ngames, nmargin, False)
-        else:
-            self.dataset = datasets.dc_dataframe(self.teams, season, month, False)
+        self.dataset = datasets.dc_dataframe(self.teams, season)
 
         # Initial Guess for the minimization
         a0 = dr.initial_guess(0, self.nteams)
@@ -260,26 +235,17 @@ class DixonRobinson(Basketball):
     scores.
     """
 
-    def __init__(self, test, model, season=None, month=None, nteams=4, ngames=4, nmargin=10):
+    def __init__(self, season, model=1):
         """
-        Initialize DixonRobinson instance.  Can be a test dataset where the teams are structured from best to worst
-        based on results or using NBA seasons.  If an ID is given, the abilities will be loaded from the database.
+        Initialize DixonRobinson instance.
 
-        :param test: Fabricated Set
         :param model: Dixon and Robinson model (1 to 4)
         :param season: NBA Season(s)
-        :param month: Calendar Month(s)
-        :param nteams: Number of teams for test set
-        :param ngames: Number of games played between teams for test set
-        :param nmargin: Winning Margin in test set
         """
 
-        super().__init__(test, season, month, nteams, ngames, nmargin)
+        super().__init__(season)
 
-        if test:
-            self.dataset = datasets.create_test_set(nteams, ngames, nmargin, True)
-        else:
-            self.dataset = datasets.dr_dataframe(model, self.teams, season, month)
+        self.dataset = datasets.dr_dataframe(model, self.teams, season)
 
         # Initial Guess for the minimization
         a0 = dr.initial_guess(model, self.nteams)
