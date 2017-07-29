@@ -58,70 +58,6 @@ class Basketball:
 
         self.abilities = None
 
-    def convert_abilities(self, opt, model):
-        """
-        Convert the numpy abilities array into a more usable dict
-        :param opt: Abilities from optimization
-        :param model: Model number determines which parameters are included (0 is Dixon Coles)
-        """
-        abilities = {'model': model}
-
-        i = 0
-
-        # Attack and defense
-        for team in self.teams:
-            abilities[team] = {
-                'att': opt[i],
-                'def': opt[i + self.nteams]
-            }
-            i += 1
-
-        # Home Advantage
-        abilities['home'] = opt[self.nteams * 2]
-
-        # Time parameters
-        if model >= 2:
-            abilities['time'] = {
-                'q1': opt[self.nteams * 2 + 1],
-                'q2': opt[self.nteams * 2 + 2],
-                'q3': opt[self.nteams * 2 + 3],
-                'q4': opt[self.nteams * 2 + 4]
-            }
-
-        # Team 4 min stretch for models 3 and 4
-        if model == 3:
-            abilities['lambda'] = {
-                '+1': opt[self.nteams * 2 + 5],
-                '-1': opt[self.nteams * 2 + 6],
-            }
-            abilities['mu'] = {
-                '+1': opt[self.nteams * 2 + 7],
-                '-1': opt[self.nteams * 2 + 8]
-            }
-        elif model == 4:
-            abilities['lambda'] = {
-                '+1': opt[self.nteams * 2 + 5],
-                '-1': opt[self.nteams * 2 + 6],
-                '+2': opt[self.nteams * 2 + 11],
-                '-2': opt[self.nteams * 2 + 12],
-                '+3': opt[self.nteams * 2 + 9],
-                '-3': opt[self.nteams * 2 + 10],
-            }
-            abilities['mu'] = {
-                '+1': opt[self.nteams * 2 + 7],
-                '-1': opt[self.nteams * 2 + 8],
-                '+2': opt[self.nteams * 2 + 15],
-                '-2': opt[self.nteams * 2 + 16],
-                '+3': opt[self.nteams * 2 + 13],
-                '-3': opt[self.nteams * 2 + 14]
-            }
-
-        if model == 5:
-            abilities['time']['home'] = opt[self.nteams * 2 + 5]
-            abilities['time']['away'] = opt[self.nteams * 2 + 6]
-
-        return abilities
-
     def test_model(self, fake, season=None, month=None, display=False):
         """
         Test the optimized model against a testing set and apply a betting strategy
@@ -236,38 +172,6 @@ class Basketball:
             print("No Bets")
         print("Bankroll: %.2f" % bankroll)
 
-    def initial_guess(self, model):
-        """
-        Create an initial guess for the minimization function
-        :param model: The model implemented (0: DC, 1: Base DR model, 2: Time Parameters, 3: winning/losing)
-        :return: Numpy array of team abilities (Attack, Defense) and Home Advantage and other factors
-        """
-
-        # Attack and Defence parameters
-        att = np.full((1, self.nteams), 100, dtype=float)
-        defense = np.full((1, self.nteams), 1, dtype=float)
-        teams = np.append(att, defense)
-
-        # Base model only contains the home advantage
-        if model == 1:
-            params = np.full((1, 1), 1.05, dtype=float)
-        # The time parameters are added to the model
-        elif model == 2:
-            params = np.full((1, 5), 1.05, dtype=float)
-        # Model is extended by adding scoreline parameters if a team is winning
-        elif model == 3:
-            params = np.full((1, 9), 1.05, dtype=float)
-        # Extend model with larger winning margins
-        elif model == 4:
-            params = np.full((1, 17), 1.05, dtype=float)
-        # Time Rates
-        elif model == 5:
-            params = np.full((1, 7), 1.05, dtype=float)
-        else:
-            params = np.full((1, 1), 1.05, dtype=float)
-
-        return np.append(teams, params)
-
 
 class DixonColes(Basketball):
     """
@@ -295,7 +199,7 @@ class DixonColes(Basketball):
             self.dataset = datasets.dc_dataframe(self.teams, season, month, False)
 
         # Initial Guess for the minimization
-        a0 = self.initial_guess(0)
+        a0 = dr.initial_guess(0, self.nteams)
 
         # Time the optimization
         start = time.time()
@@ -309,7 +213,7 @@ class DixonColes(Basketball):
         print("Time: %f" % (end - start))
 
         # Scipy minimization requires a numpy array for all abilities, so convert them to readable dict
-        self.abilities = self.convert_abilities(self.opt.x, 0)
+        self.abilities = dr.convert_abilities(self.opt.x, 0, self.teams)
 
     def find_time_param(self):
         """
@@ -349,45 +253,6 @@ class DixonColes(Basketball):
 
         return s
 
-    def dynamic_dixon_coles(self):
-        """
-        Computer the team abilities for every week by combining the datasets and using the time value
-        """
-
-        # MongoDB
-        mongo = mongo_utils.MongoDB()
-
-        # Original DC dataset
-        original = self.dataset.copy()
-
-        # The rest of the games to be gradually added to dataset
-        test = datasets.dc_dataframe(self.teams, season=[2014, 2015, 2016, 2017], bet=True)
-
-        # Group them by weeks
-        weeks_df = test.groupby('week')
-
-        a0 = self.initial_guess(0)
-
-        # Recalculate the Dixon Coles parameters every week after adding the previous week to the dataset
-        for t in weeks_df.groups:
-
-            opt = minimize(dr.dixon_coles, x0=a0, args=(original, self.nteams, t, 0.024),
-                           constraints=self.con, method='SLSQP')
-
-            abilities = self.convert_abilities(opt.x, 0)
-
-            week = weeks_df.get_group(t)
-            date = set()
-
-            for row in week.itertuples():
-                date.add(row.date.to_pydatetime())
-                original = original.append(week, ignore_index=True)
-
-            print(date)
-            abilities['min_date'] = min(date)
-            abilities['max_date'] = max(date)
-            mongo.insert('dixon', abilities)
-
 
 class DixonRobinson(Basketball):
     """
@@ -417,7 +282,7 @@ class DixonRobinson(Basketball):
             self.dataset = datasets.dr_dataframe(model, self.teams, season, month)
 
         # Initial Guess for the minimization
-        a0 = self.initial_guess(model)
+        a0 = dr.initial_guess(model, self.nteams)
 
         # Time the optimization
         start = time.time()
@@ -430,4 +295,4 @@ class DixonRobinson(Basketball):
         print("Time: %f" % (end - start))
 
         # Scipy minimization requires a numpy array for all abilities, so convert them to readable dict
-        self.abilities = self.convert_abilities(self.opt.x, model)
+        self.abilities = dr.convert_abilities(self.opt.x, model, self.teams)
