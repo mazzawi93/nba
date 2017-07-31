@@ -2,6 +2,7 @@ from db import datasets
 from scipy.stats import poisson
 from db import mongo_utils
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def determine_probabilities(hmean, amean):
@@ -28,7 +29,7 @@ def determine_probabilities(hmean, amean):
     return np.sum(hprob), np.sum(aprob)
 
 
-def dixon_prediction(season, abilities=None):
+def dixon_prediction(season, abilities=None, r = 1):
     """
     Dixon Coles or Robinson game prediction based off the team probabilities.
 
@@ -64,12 +65,9 @@ def dixon_prediction(season, abilities=None):
 
         hprob[row.Index], aprob[row.Index] = determine_probabilities(hmean, amean)
 
-    test['hprob'] = hprob
-    test['aprob'] = aprob
-
     # Actual winners and predictions
     winners = np.where(test.hpts > test.apts, test.home, test.away)
-    predictions = np.where(test.hprob > test.aprob, test.home, test.away)
+    predictions = np.where(hprob > aprob, test.home, test.away)
 
     # Determine correct predictions
     correct = np.equal(winners, predictions)
@@ -78,4 +76,25 @@ def dixon_prediction(season, abilities=None):
     #    ncorrect[int(predict_prob * 100)] += 1
     # ngames[int(predict_prob * 100)] += 1
 
-    return sum(correct) / len(winners)
+    # Probabilities set by betting odds
+    hbp = 1 / test['hbet']
+    abp = 1 / test['abet']
+
+    # Bookmakers 'take'
+    take = hbp + abp
+
+    # Rescale odds so they add to 1
+    hbp = hbp / take
+    abp = abp / take
+
+    # Bet on home and away teams
+    bet_home = hprob/hbp > r
+    bet_away = aprob/abp > r
+
+    hprofit = np.dot(bet_home.astype(int), np.where(test['hpts'] > test['apts'], test['hbet'], 0))
+    aprofit = np.dot(bet_away.astype(int), np.where(test['apts'] > test['hpts'], test['abet'], 0))
+    profit = hprofit + aprofit
+
+    exp_return = profit / (sum(bet_home) + sum(bet_away))
+
+    return correct, exp_return

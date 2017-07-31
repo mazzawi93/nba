@@ -31,7 +31,7 @@ class Basketball:
 
         self.abilities = None
 
-    def test_model(self, season=None, display=False):
+    def test_model(self, season=Nonel):
         """
         Test the optimized model against a testing set and apply a betting strategy
 
@@ -45,9 +45,9 @@ class Basketball:
         if season is None:
             season = 2017
 
-        ncorrect, ngames = dixon_prediction(season, self.abilities, display)
+        ncorrect = dixon_prediction(season, self.abilities)
 
-        return ncorrect, ngames
+        return ncorrect
 
 
 class DixonColes(Basketball):
