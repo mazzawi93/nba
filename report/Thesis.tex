@@ -10,7 +10,6 @@
 \usepackage[square, numbers, comma, sort&compress]{natbib}  % Use the "Natbib" style for the references in the Bibliography
 \usepackage{verbatim}  % Needed for the "comment" environment to make LaTeX comments
 \usepackage{vector}  % Allows "\bvec{}" and "\buvec{}" for "blackboard" style bold vectors in maths
-\usepackage{minted}
 \hypersetup{urlcolor=blue, colorlinks=false}  % Colours hyperlinks in blue, but this can be distracting if there are many links.
 
 %% ----------------------------------------------------------------
@@ -90,14 +89,7 @@ Date:\\
 \abstract{
 \addtocontents{toc}{\vspace{1em}}  % Add a gap in the Contents, for aesthetics
 
-This will be a dissertation on the optimal team formation in fantasy basketball.  The first step is to predict match scores using the dixon model. ntasy basketball.  The first step is to predict match scores using the dixon model. ntasy basketball.  The first step is to predict match scores using the dixon model. ntasy basketball.  The first step is to predict match scores using the dixon model.ntasy basketball.  The first step is to predict match scores using the dixon model.
-ntasy basketball.  The first step is to predict match scores using the dixon model.
-ntasy basketball.  The first step is to predict match scores using the dixon model.
-ntasy basketball.  The first step is to predict match scores using the dixon model.
-ntasy basketball.  The first step is to predict match scores using the dixon model.ntasy basketball.  The first step is to predict match scores using the dixon model.
-ntasy basketball.  The first step is to predict match scores using the dixon model.
-ntasy basketball.  The first step is to predict match scores using the dixon model.
-ntasy basketball.  The first step is to predict match scores using the dixon model.ntasy basketball.  The first step is to predict match scores using the dixon model.ntasy basketball.  The first step is to predict match scores using the dixon model.ntasy basketball.  The first step is to predict match scores using the dixon model.vntasy basketball.  The first step is to predict match scores using the dixon model.
+This will be a dissertation on the optimal team formation in fantasy basketball. 
 }
 
 \clearpage  % Abstract ended, start a new page
@@ -182,19 +174,21 @@ $\rho$ & Time\\
 % Include the chapters of the thesis, as separate files
 % Just uncomment the lines as you write the chapters
 
-\input{Chapters/Chapter1} % Introduction
+\input{Chapters/Introduction}
 
-\input{Chapters/Chapter2} % Background Theory 
+\input{Chapters/Sports_Background}
 
-\input{Chapters/Chapter3} % Experimental Setup
+\input{Chapters/Data}
 
-\input{Chapters/Chapter4} % Experiment 1
+\input{Chapters/Team_Model}
 
-\input{Chapters/Chapter5} % Results and Discussion
+\input{Chapters/Player_Model}
 
-\input{Chapters/Chapter6} % Conclusion
+\input{Chapters/Sports_Betting}
 
-\input{Chapters/Chapter7}
+\input{Chapters/Fantasy_Basketball}
+
+\input{Chapters/Conclusion}
 
 %% ----------------------------------------------------------------
 % Now begin the Appendices, including them as separate files

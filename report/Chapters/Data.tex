@@ -1,0 +1,19 @@
+\chapter{Data}\label{chapter:data}
+
+The NBA has been shifting towards data analytics in the past few years.  The evolution began in baseball with the book Moneyball.  For this project, the data used will be game logs for players and teams in the past few seasons
+
+\textit{Introduce how there is a lot of NBA data and how the NBA is shifting towards analytics.  Talk about the sources and collection and storage.}
+
+\section{Data Sources}
+There are a multitude of resources for NBA data including basketball reference, the official NBA website and others.
+
+There is a ton of information available from each basketball game.  The models will use data from the 2013-14, 2014-15 and 2015-2016 season.  The 2016-17 season is used as a testing set.  Data collected includes game logs, season stats for teams and players.  The game logs include the total statistics from a game for all different basketball stats and the timestamp of every thing happening tagged by the player.  This leads to a lot of information for the games.
+
+\section{Data Collection}
+
+Due to several teams relocating and changing their names over the previous seasons, this led to challenges in scraping the data.
+
+Using the Beautiful Soup library \cite{beautifulsoup}, the data was scraped.
+
+\section{Data Storage}
+Once the data was collected, it was stored using MongoDB which is a NoSQL database.  This allows for ease of manipulation.
