@@ -79,90 +79,7 @@ $$\mu_k = \alpha_{j(k)}\beta_{i(k)}$$
 
 The team abilities for the NBA can be seen in Table \ref{table:dc_141516}.  Using these numbers, and selecting the team with the highest probability of winning a game.  The accuracy of selecting a winner was 63.84\% and the value betting strategy won 57.84 units with 37.06\% winning bets.
 
-\begin{table}[t]
-	\centering
-	\caption{Parameter estimates from the 2014, 2015 and 2016 NBA season using the Dixon Coles model implemented for Basketball}
-	\begin{tabular}{|l|c|c|}
-		\hline
-		\textbf{Team}  & \textbf{$\hat{\alpha}$} & \textbf{$\hat{\beta}$} \\ \hline
-		Atlanta Hawks  & 100.902 & 0.985\\ \hline
-		Boston Celtics & 99.962 & 1.010\\ \hline
-		Brooklyn Nets  & 97.400 & 1.013\\ \hline
-		Charlotte Hornets & 96.978 & 0.976\\ \hline
-		Chicago Bulls & 97.688 & 0.969\\ \hline
-		Cleveland Cavaliers & 101.066 & 0.990\\ \hline
-		Dallas Mavericks & 102.960 & 1.008 \\ \hline
-		Denver Nuggets & 101.646 & 1.038\\ \hline
-		Detroit Pistons & 99.256 & 1.012\\ \hline
-		Golden State Warriors & 108.000 & 0.995\\ \hline
-		Houston Rockets & 104.750 & 1.017 \\ \hline
-		Indiana Pacers & 97.358 & 0.957 \\ \hline
-		Los Angeles Clippers & 104.578 & 0.984\\ \hline
-		Los Angeles Lakers & 98.553 & 1.052 \\ \hline
-		Memphis Grizzlies & 95.980 & 0.947\\ \hline
-		Miami Heat & 97.829 & 0.969\\ \hline
-		Milwaukee Bucks & 96.464 & 1.006\\ \hline
-		Minnesota Timberwolves & 101.166 & 1.038\\ \hline
-		New Orleans Pelicans & 99.337 & 1.007\\ \hline
-		New York Knicks & 95.207 & 0.996\\ \hline
-		Oklahoma City Thunder & 105.347 & 1.000\\ \hline
-		Orlando Magic & 97.111 & 1.015\\ \hline
-		Philadelphia 76ers & 95.430 & 1.0518\\ \hline
-		Phoenix Suns & 101.608 & 1.027\\ \hline
-		Portland Trail Blazers & 103.534 & 1.002\\ \hline
-		Sacramento Kings & 101.560 & 1.040\\ \hline
-		San Antonio Spurs & 102.417 & 0.943\\ \hline
-		Toronto Raptors & 101.480 & 0.984 \\ \hline
-		Utah Jazz & 94.453 & 0.956\\ \hline
-		Washington Wizards & 99.983 & 0.999\\ \hline
-		\multicolumn{2}{|c|}{\textbf{Home Court Advantage}} & 1.025\\ \hline
-	\end{tabular}
-	\label{table:dc_141516}
-\end{table}
 
-
-On October 25th 2016,
-
-\begin{table}[t]
-	\centering
-	\caption{Parameter estimates from October26th, 2016}
-	\begin{tabular}{|l|c|c|}
-		\hline
-		\textbf{Team}  & \textbf{$\hat{\alpha}$} & \textbf{$\hat{\beta}$} \\ \hline
-		Atlanta Hawks  & 100.605 & 0.985\\ \hline
-		Boston Celtics & 102.261 & 1.010\\ \hline
-		Brooklyn Nets  & 97.253 & 1.013\\ \hline
-		Charlotte Hornets & 99.197 & 0.976\\ \hline
-		Chicago Bulls & 99.028 & 0.969\\ \hline
-		Cleveland Cavaliers & 101.748 & 0.990\\ \hline
-		Dallas Mavericks & 100.795 & 1.008 \\ \hline
-		Denver Nuggets & 100.306 & 1.038\\ \hline
-		Detroit Pistons & 99.567 & 1.012\\ \hline
-		Golden State Warriors & 110.88 & 0.995\\ \hline
-		Houston Rockets & 104.392 & 1.017 \\ \hline
-		Indiana Pacers & 98.837 & 0.957 \\ \hline
-		Los Angeles Clippers & 102.403 & 0.984\\ \hline
-		Los Angeles Lakers & 95.761 & 1.052 \\ \hline
-		Memphis Grizzlies & 96.519 & 0.947\\ \hline
-		Miami Heat & 97.311 & 0.966\\ \hline
-		Milwaukee Bucks &96.664 & 1.001\\ \hline
-		Minnesota Timberwolves & 99.781 & 1.036\\ \hline
-		New Orleans Pelicans & 99.503 & 1.020\\ \hline
-		New York Knicks & 94.808 & 0.991\\ \hline
-		Oklahoma City Thunder & 106.614 & 1.006\\ \hline
-		Orlando Magic & 98.861 & 1.018\\ \hline
-		Philadelphia 76ers & 94.973 & 1.044\\ \hline
-		Phoenix Suns & 99.095 & 1.039\\ \hline
-		Portland Trail Blazers & 102.744 & 1.010\\ \hline
-		Sacramento Kings & 102.875 & 1.053\\ \hline
-		San Antonio Spurs & 101.040 & 0.918\\ \hline
-		Toronto Raptors & 100.860 & 0.973 \\ \hline
-		Utah Jazz & 94.318 & 0.931\\ \hline
-		Washington Wizards & 101.000 & 1.011\\ \hline
-		\multicolumn{2}{|c|}{\textbf{Home Court Advantage}} & 1.035\\ \hline
-	\end{tabular}
-	\label{table:dc_oct2016}
-\end{table}
 
 
 \subsection{Model Limitation and Modification}
@@ -192,57 +109,31 @@ $$\phi(t) = \exp(-\xi t)$$
 	S(\xi) = \sum_{k=1}^{N}(\delta_k^H\log p_k^H + \delta_k^A\log p_k^A + \delta_k^D\log p_k^D)
 \end{equation}
 
-\begin{figure}[h]
+\begin{figure}[ht]
 	\centering
 	\includegraphics[width=1\textwidth]{{Figures/xi_plot.pdf}}
 	\captionof{figure}{S($\xi$) vs $\xi$: The maximum occurs at $\xi = 0.024$.}
 	\label{fig:play_by_play}
 \end{figure}
 
-\section{Dixon and Robinson}
-Dixon and Robinson proposed an extension on the static Dixon and Coles model by incorporating the individual goal times.
-
-\subsection{Model}
-Dixon and Robinson began by 
-
-It was clear that the Dixon and Coles model is more suitable for basketball and those team abilities will be used moving forward.
-\section{Some Math Stuff}
-The numbers can be seen in Table.  Using these numbers, and selecting the team with the highest probability of winning a game.  The accuracy of selecting a winner was 63.84\% and the value betting strategy won 57.84 units with 37.06\% winning bets.
-
-Tried the Dixon and Coles model with a time parameter of 0.02 and the values seem more accurate.  The accuracy of selecting a winner was 63.21\% and the value betting strategy won 63.55 units with 38.03\% betting accuracy.  Did only the 2016 season and 64\% with the new vectorized way of doing it and 63.25 units.
-
-Vectorized Dixon Coles and went from like 1341 seconds to 9 seconds for 3 seasons worth.  For some reason when I do Dixon Coles with the time factor with 2014, 2015 it gives me weird numbers but works perfectly fine with 2016 and 2017.  Must be something with the dataset
-In the Dixon-Robinson model,.  By looking at NBA statistics the final minute of each quarter is likely to have an increase in scoring.
-
-
-Dixon and Robinson model 1 is shown in Table \ref{table:dr_1_141516}.  The accuracy of selecting a winner was 60.28\% and the value betting strategy won 98.14 units with 37.31\% betting accuracy.
-
-The issue with the betting is that it likes to bet on very high odds as the model computes probabilities differently.  Odds over 5 are usually bet.
-
-
-\begin{equation}
-    \lambda_k(t) = 
-    \begin{cases}
-        \rho_{1}\lambda_{xy}\lambda_{k} & \text{for }t \in (11/48, 12/48],\\
-        \rho_{2}\lambda_{xy}\lambda_{k} & \text{for }t \in (23/48, 24/48],\\
-        \rho_{3}\lambda_{xy}\lambda_{k} & \text{for }t \in (35/48, 36/48],\\
-        \rho_{4}\lambda_{xy}\lambda_{k} & \text{for }t \in (47/48, 48/48],\\
-        \lambda_{xy}\lambda_{k} & \text{otherwise}
-\end{cases}
-\end{equation}
-
-The away rate is similar $\mu_k(t)$.
-
-
-
-The optimal value is 0.024.
-
-\section{Team Model}
-
-Just like the model from Section a, with $n$ teams, the offence parameters $\{\alpha_1,\ldots,\alpha_n\}$ $\{\beta_1,\ldots,\beta_n\}$ $\gamma_h$ are to be estimated.  The following constraint is imposed due to the 
-
-$$\frac{1}{n}\sum^{n}_{i=1}\alpha_i = 100$$
-
-For the NBA, there are 30 teams, which gives a total of 61 parameters to be estimated.
-
-\section{Player Model}
+\begin{figure}[ht]
+	\centering
+	\begin{subfigure}{0.67\linewidth}
+	\includegraphics[width=1\textwidth]{{Figures/weeks_attack.pdf}}
+	\caption{}	
+	\end{subfigure}
+	
+	\begin{subfigure}{0.67\linewidth}
+	\includegraphics[width=1\textwidth]{{Figures/weeks_defence.pdf}}
+	\caption{}
+	\end{subfigure}
+	
+	\begin{subfigure}{0.67\linewidth}
+	\includegraphics[width=1\textwidth]{{Figures/weeks_home.pdf}}
+	\caption{}
+	\end{subfigure}
+	
+	\caption{(A),(B) Attack and defence parameter weekly estimates for the Oklahoma City Thunder, Boston Celtics and Chicago Bulls; (C) Home advantage parameter variation.}
+	\label{fig:weeks_dc}
+	
+\end{figure}
