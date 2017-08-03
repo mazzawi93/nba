@@ -191,3 +191,11 @@ def dynamic_dixon_coles():
         abilities['min_date'] = min(date)
         abilities['max_date'] = max(date)
         mongo.insert('dixon', abilities)
+
+
+def player_dixon_coles(params, games, week, time):
+
+    likelihood = poisson.logpmf(games['ppts'], params[0])
+    weight = np.exp(-time * (week - games['week']))
+
+    return -np.dot(likelihood, weight)
