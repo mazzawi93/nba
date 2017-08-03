@@ -300,6 +300,25 @@ def player_dataframe(season=None):
     df = pd.DataFrame(list(games))
     df = pd.concat([df.drop(['_id'], axis=1), df['_id'].apply(pd.Series)], axis=1)
 
+    # Change teams into means
+    weeks = dc.groupby('week')
+
+    hmean, amean = [], []
+
+    # Convert team names into dixon and coles dynamic abilities
+    for week, stats in weeks:
+        dixon = mongo.find_one('dixon', {'week': int(week)})
+
+        for row in stats.itertuples():
+            hmean.append(dixon[row.home]['att'] * dixon[row.away]['def'] * dixon['home'] / 100)
+            amean.append(dixon[row.away]['att'] * dixon[row.home]['def'] / 100)
+
+    dc['home'] = hmean
+    dc['away'] = amean
+
     df = df.merge(dc, left_on='game', right_on='_id', how='inner')
+
+    for key in ['_id', 'game', 'apts', 'hpts', 'date']:
+        del df[key]
 
     return df
