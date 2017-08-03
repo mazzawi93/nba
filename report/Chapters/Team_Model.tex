@@ -90,7 +90,7 @@ where, $\delta_k^H = 1$ if match $k$ was a home win and $\delta_k^H=0$ otherwise
 	\centering
 	\includegraphics[width=0.75\textwidth]{{Figures/xi_plot.pdf}}
 	\captionof{figure}{S($\xi$) vs $\xi$: The maximum occurs at $\xi = 0.024$.}
-	\label{fig:play_by_play}
+	\label{fig:xi}
 \end{figure}
 
 
@@ -176,4 +176,54 @@ It seems that data from 1.5 seasons are required for the most accurate estimatio
 \end{figure}
 
 \section{Dixon and Robinson}
-Dixon and Robinson created a model that was an extension of model.
+Dixon and Robinson began by extending model (\ref{eq:dc_likelhiood}) created by Dixon and Coles \citep{dixon_coles}.
+
+\begin{equation}
+\begin{split}
+\lambda_k(t) & = \lambda_k = \alpha_{i(k)}\beta_{j(k)}\gamma, \\
+\mu_k(t)  & = \mu_k = \alpha_{j(k)}\beta_{i(k)}
+\end{split}
+\end{equation}
+
+
+\begin{equation}
+(\bm{t}_k, \bm{J}_k) = \{(t_{k,l}, J_{k,l}: l=1,\ldots,m_k\}
+\end{equation}
+
+$$\lambda_k(t) = \lambda_{xy}\lambda_k$$
+
+and
+
+$$\mu_k(t) = \mu_{xy}\mu_k$$
+
+\begin{equation}
+    \lambda_t(k)= 
+\begin{cases}
+	\rho_1\lambda_{xy}\lambda_k,& \text{for }t \in(44/90, 45/90], \\
+	\rho_2\lambda_{xy}\lambda_k,& \text{for }t \in(89/90, 90/90], \\
+    \lambda_{xy}\lambda_k,      & \text{otherwise}
+\end{cases}
+\end{equation}
+
+% Stoppage Time Parameters
+Dixon and Robinson extended the model by introducing new parameters to represent goals scored during injury time (45+, 90+ minutes).  Figure \ref{fig:point_dist} is a histogram for the point times in games from the 2013-2016 seasons.  There appears to be more points scored at the end of each quarter, especially at the end of the game.  Thus, the basketball model will include the $\rho$ parameters.  However, it will include 4 parameters instead of 2 for each quarter.
+
+
+\begin{figure}[!htb]
+	\centering
+	\includegraphics[width=0.75\textwidth]{{Figures/point_dist.pdf}}
+	\captionof{figure}{Histogram of point times}
+	\label{fig:point_dist}
+\end{figure}
+
+\begin{equation}
+L(\bm{t}_k, \bm{J}_k) = \exp(-\bm{\wedge}[0, 1])\exp(-\text{\textbf{Y}}[0, 1])\prod_{l=1}^{m_k}\lambda_k(t_{k,l})^{1-J_{k,l}}\mu_k(t_{k,l})^{J_{k,l}}
+\end{equation}
+
+where
+
+$$\bm{\wedge}[t_1, t_2] = \int_{t_1}^{t_2}\lambda_k(t)dt$$
+
+and
+
+$$\text{\textbf{Y}}[t_1, t_2] = \int_{t_1}^{t_2}\mu_k(t)dt$$

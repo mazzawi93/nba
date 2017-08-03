@@ -113,6 +113,7 @@
 \usepackage[section]{placeins}
 \usepackage{rotating}
 \usepackage{listings}
+\usepackage{bm}
 \usepackage{lstpatch}
 \lstset{captionpos=b,
         frame=tb,
