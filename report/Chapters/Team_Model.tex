@@ -1,45 +1,29 @@
-\chapter{Team Model}\label{chapter:team_model}
+\chapter{Team Models}\label{chapter:team_model}
 
-When evaluating players, it is very important to realize that the team they play for and their opponent will have a strong influence on their performance no matter the skill level.
-\textit{Find something that states a player is directly affected by their team}
+This section will investigate different models.
 
 \section{Dixon and Coles}
-Dixon and Coles set out to create a model that incorporates team's attacking and defending abilities \cite{dixon_coles}.
-
-Dixon and Coles created a model with the aim of developing a profitable betting strategy for English football \cite{dixon_coles}.  The model assumes that the amount of goals scored by the home and away sides in any match are independent Poisson variables.  The means are determined by the attack and defence attributes of each side \cite{dixon_coles}.
-
-Dixon and Robinson extended the previously discussed model by using the time each goal was scored instead of only the full time scores \cite{dixon_robinson}. 
+The Dixon and Coles model is one developed for English football that uses full-time scores to predict the probabilities of a future match.  The following will be a deeper look into the football model with modifications made for basketball.
 
 \subsection{Model}
 
-There are features 
+The main assumption of the model is that the goals scored by the home and away team are independent Poisson variables.  The Poisson means in a particular game are determined by each team's attack and defence abilities.   In a match between teams $i$ and $j$, the number of goals scored by the home and away teams are denoted by
 
-\begin{itemize}
-	\item The model should incorporate the different abilities of both teams.
-	\item There should be an advantage for the team playing at home.
-	\item The team abilities should be based on a summary of their recent games.
-	\item A team's ability is likely to 
-	\item When evaluating a team's performance, the ability of the opposing team should be taken into account.
-	
-\end{itemize}
-
-The base assumption of the model is that the goals scored by the home and away teams are independent Poisson variables.  In a match between teams $i$ and $j$, the number of goals scored by the home and away teams are denoted by
-
-$$X_{ij} ~ \text{Poisson}(\alpha_i\beta_j\gamma_h)$$
-$$Y_{ij} ~ \text{Poisson}(\alpha_j\beta_i)$$
+$$X_{ij} \sim \text{Poisson}(\alpha_i\beta_j\gamma),$$
+$$Y_{ij} \sim \text{Poisson}(\alpha_j\beta_i),$$
 
 where $X_{ij}$ and $Y_{ij}$ are independent, $\alpha_i, \beta_i > 0.$
 
 Dixon and Coles present the following to determine the probabilities of goals scored in a match.
 
-\begin{equation}
+\begin{equation}\label{eq:base_dc}
 \text{Pr}(X_{ij}=x, Y_{ij} = y) = \tau_{\lambda,\mu}(x, y)\frac{\lambda^x\exp(-\lambda)}{x!}\frac{\mu^y\exp(-\mu)}{y!}
 \end{equation}
 
 where
 
-$$\lambda = \alpha_i\beta_j\gamma_h$$
-$$\mu = \alpha_j\beta_i$$
+$$\lambda = \alpha_i\beta_j\gamma,$$
+$$\mu = \alpha_j\beta_i,$$
 
 and
 
@@ -54,69 +38,122 @@ and
 	\end{cases}
 \]	
 
-Dixon and Coles state that .  In the model, $\rho$ is a dependence parameter where $\rho=0$ corresponds to independence.  Basketball and football are fundamentally different sports, thus this dependence parameter is ignored for the basketball model.  
+
 
 \subsection{Parameter Estimation}
-
-From model \ref{eq:dc_likelihood} with $n$ teams, there are the attack abilities $\{\alpha_1,\ldots,\alpha_n\}$, defence abilities $\{\beta_1,\ldots,\beta_n\}$ and the home advantage parameter $\gamma$ to be estimated.  The constraint
+Dixon and Coles imposed the following constraint to prevent the model from being overparameterized
 
 $$\frac{1}{n}\sum_{i=1}^{n}\alpha_i = 1$$
 
-is imposed by Dixon and Coles to keep the model from being over-parameterized.  For the basketball model, this constraint will be equal to 100 due to basketball scores being much higher than football.  
+For the National Basketball Association, there are 30 teams, which gives a total of 61 parameters to be estimated.  To estimate these parameters, a likelihood function is used.  For matches, $k=1,\ldots,N$, with scores $(x_k, y_k)$:
 
-To estimate The National Basketball Association has 30 teams, thus the model has 61 parameters.  With matches indexed $k=1,\ldots,N$, and scores $(x_k, y_k)$, the likelihood function takes the form of
-
-
-
-\begin{equation} \label{eq:dc_likelihood}
-L(\alpha_i,\beta_i,\gamma, i=1,\ldots,n) = \prod_{k=1}^{N} \exp(-\lambda_k)\lambda_{k}^{x_k}\exp(-\mu_k)\mu_{k}^{y_k}
+\begin{equation}\label{eq:dc_likelhiood}
+L_t(\alpha_i, \beta_i,\gamma,i=1,\ldots,n) = \prod_{k=1}^{N} \exp(-\lambda_k)\lambda_{k}^{x_k}\exp(-\mu_k)
 \end{equation}
 
 where
 
 $$\lambda_k = \alpha_{i(k)}\beta_{j(k)}\gamma,$$
-$$\mu_k = \alpha_{j(k)}\beta_{i(k)}$$
+$$\mu_k = \alpha_{j(k)}\beta_{i(k)},$$
 
-The team abilities for the NBA can be seen in Table \ref{table:dc_141516}.  Using these numbers, and selecting the team with the highest probability of winning a game.  The accuracy of selecting a winner was 63.84\% and the value betting strategy won 57.84 units with 37.06\% winning bets.
-
-
-
+and $i(k)$ and $j(k)$ are the indices of the home and away teams playing in match $k$.  The parameters can be found by maximising (\ref{eq:dc_likelhiood}).
 
 \subsection{Model Limitation and Modification}
+The basic limitation of model (\ref{eq:dc_likelhiood}) is that the parameters are static.  All the matches are weighed equally which leads to teams having the same ability parameters over time, when in reality team performance tends to fluctuate.  Especially over the course of multiple seasons where players may change teams.  Teams may go through multiple injuries, winning and losing streaks and multiple other factors.  The current model does not accurately reflect teams' recent form.  In order to compensate for this, Dixon and Coles introduced a modification to the model by adding a factor that will reduce the significance of older matches:
 
-The main limitation of model \ref{eq:dc_likelihood} is that the parameters are static.  The team abilities are constant throughout time, when in reality they are always evolving.  Since we are always estimating team parameters at a certain time point $t$, Dixon and Coles proposed that more recent matches should hold higher value compared to it's historical counterparts.  Adjusting equation \ref{eq:dc_likelihood} leads to
-
-\begin{equation} \label{eq:dc_likelihood_time}
-L(\alpha_i,\beta_i,\gamma, i=1,\ldots,n) = \prod_{k=1}^{N} \left\lbrace \exp(-\lambda_k)\lambda_{k}^{x_k}\exp(-\mu_k)\mu_{k}^{y_k}\right\rbrace ^{\phi(t-t_k)}
+\begin{equation}\label{eq:dc_time}
+L_t(\alpha_i, \beta_i,\gamma,i=1,\ldots,n) = \prod_{k=1}^{N} \{\exp(-\lambda_k)\lambda_{k}^{x_k}\exp(-\mu_k)\}^{\phi(t-t_k)}
 \end{equation}
 
-where $t$ is the time the estimation is made, $t_k$ is the time match $k$ was played and $\phi$ is a non-increasing function of time.
+In the model, $t$ is the time the estimation was made and $t_k$ is the time match $k$ was played.  Match weighting can be changed by varying $\phi$.  Dixon and Coles chose the model
 
+$$\phi(t) = \exp(-\xi t),$$
 
-They chose the model to be
+where all previous matches are downweighted exponentially based on $\xi > 0$.  When $\xi = 0$, all matches have equal weight, such as model (\ref{eq:dc_likelhiood}).  Larger values of $\xi$ will give more weight to recent matches.
 
-$$\phi(t) = \exp(-\xi t)$$
+Note that the probability of a home win in match $k$ is given by:
 
 \begin{equation}
-	L(\alpha, \beta) = \left\lbrace \exp(-\lambda_k) \lambda_{k}^{x_k}\exp(-\mu_{k})\mu_k^{y_k}\right\rbrace^{\phi(t-t_k)} 
+p_k^H = \sum_\text{Pr}(X_{k} = x, Y_{k} = y)
 \end{equation}
 
-\begin{equation} \label{eq:home_prob}
-	p_k^H = \sum \text{Pr}(X_k = x, Y_k = y) 
+To optimise the selection of $\xi$.
+
+\begin{equation}
+S(\xi) = \sum_{k=1}^{N}(\delta_k^H\log p_k^H + \delta_k^A \log p_k^A)
 \end{equation}
 
-\begin{equation} \label{eq:s_estimation}
-	S(\xi) = \sum_{k=1}^{N}(\delta_k^H\log p_k^H + \delta_k^A\log p_k^A + \delta_k^D\log p_k^D)
-\end{equation}
+where, $\delta_k^H = 1$ if match $k$ was a home win and $\delta_k^H=0$ otherwise and vice versa for $\delta_k^A$.  The original model by Dixon and Coles includes a parameter for draws, but seeing as there are no draws in basketball it is ignored.  The function is maximised at $\xi=0.024$
 
-\begin{figure}[ht]
+
+\begin{figure}[!htb]
 	\centering
-	\includegraphics[width=1\textwidth]{{Figures/xi_plot.pdf}}
+	\includegraphics[width=0.75\textwidth]{{Figures/xi_plot.pdf}}
 	\captionof{figure}{S($\xi$) vs $\xi$: The maximum occurs at $\xi = 0.024$.}
 	\label{fig:play_by_play}
 \end{figure}
 
-\begin{figure}[ht]
+
+
+\subsection{Dynamic Parameter Estimation}
+It seems that data from 1.5 seasons are required for the most accurate estimations.  Table \ref{table:dc} show the estimates on October 10th, 2016, splitting teams in the western and eastern conferences.  It is interesting to note that the Western Conference is clearly superior.
+
+\begin{table}[!ht]
+\centering
+
+\begin{subtable}[t]{0.5\textwidth}\centering
+	\begin{tabular}[t]{|l|c|c|}
+		\hline
+		\textbf{Team}  & \textbf{$\hat{\alpha}$} & \textbf{$\hat{\beta}$} \\ \hline
+		Dallas Mavericks & 102.869 & 1.014 \\ \hline
+		Denver Nuggets & 103.053 & 1.035\\ \hline
+		Golden State Warriors & \textbf{106.907} & 1.002\\ \hline
+		Houston Rockets & 105.584 & 1.024 \\ \hline
+		Los Angeles Clippers & 104.276 & 0.982\\ \hline
+		Los Angeles Lakers & 99.822 & 1.045 \\ \hline
+		Memphis Grizzlies & 95.908 & 0.939\\ \hline
+		Minnesota Timberwolves & 100.239 & 1.027\\ \hline
+		New Orleans Pelicans & 98.449 & 1.003\\ \hline
+		Oklahoma City Thunder & 105.840 & 0.995\\ \hline
+		Phoenix Suns & 100.450 & 1.028\\ \hline
+		Portland Trail Blazers & 102.473 & 1.007\\ \hline
+		Sacramento Kings & 101.740 & 1.046\\ \hline
+		San Antonio Spurs & 102.961 & \textbf{0.952}\\ \hline
+		Utah Jazz & 95.716 & 0.966\\ \hline
+		\textbf{Mean} & 101.752 & 1.004\\ \hline
+	\end{tabular}
+\caption{Western Conference}
+\end{subtable}\hfill
+\begin{subtable}[t]{0.5\textwidth}\centering
+	\begin{tabular}[t]{|l|c|c|}
+		\hline
+		\textbf{Team}  & \textbf{$\hat{\alpha}$} & \textbf{$\hat{\beta}$} \\ \hline
+		Atlanta Hawks  & 100.728 & 0.990\\ \hline
+		Boston Celtics & 99.638 & 1.004\\ \hline
+		Brooklyn Nets  & 97.690 & 1.004\\ \hline
+		Charlotte Hornets & 96.624 & 0.994\\ \hline
+		Chicago Bulls & 96.872 & 0.963\\ \hline
+		Cleveland Cavaliers & 100.233 & 1.000\\ \hline
+		Detroit Pistons & 98.845 & 1.012\\ \hline
+		Indiana Pacers & 97.241 & \textbf{0.951} \\ \hline
+		Miami Heat & 99.522 & 0.971\\ \hline
+		Milwaukee Bucks & 97.573 & 1.012\\ \hline
+		New York Knicks & 96.838 & 0.993\\ \hline
+		Orlando Magic & 96.879 & 1.020\\ \hline
+		Philadelphia 76ers & 95.337 & 1.036\\ \hline
+		Toronto Raptors & \textbf{100.927} & 0.991 \\ \hline
+		Washington Wizards & 98.768 & 0.994\\ \hline
+		\textbf{Mean} & 98.248 & 0.996\\ \hline
+	\end{tabular}
+\caption{Eastern Conference}
+\end{subtable}
+
+\caption{lala}
+\label{table:dc}
+
+\end{table}
+
+\begin{figure}[!ht]
 	\centering
 	\begin{subfigure}{0.67\linewidth}
 	\includegraphics[width=1\textwidth]{{Figures/weeks_attack.pdf}}
@@ -133,7 +170,10 @@ $$\phi(t) = \exp(-\xi t)$$
 	\caption{}
 	\end{subfigure}
 	
-	\caption{(A),(B) Attack and defence parameter weekly estimates for the Oklahoma City Thunder, Boston Celtics and Chicago Bulls; (C) Home advantage parameter variation.}
-	\label{fig:weeks_dc}
+	\caption{(A),(B) Attack and defence parameter weekly estimates for the Oklahoma City Thunder, Boston Celtics and Chicago Bulls; (C) Home advantage parameter variation.\label{fig:weeks_dc}}
+	
 	
 \end{figure}
+
+\section{Dixon and Robinson}
+Dixon and Robinson created a model that was an extension of model.

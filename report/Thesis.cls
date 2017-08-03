@@ -110,6 +110,7 @@
 \usepackage{epstopdf}
 \usepackage{subcaption}
 \usepackage{booktabs}
+\usepackage[section]{placeins}
 \usepackage{rotating}
 \usepackage{listings}
 \usepackage{lstpatch}
