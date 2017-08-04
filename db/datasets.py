@@ -264,23 +264,21 @@ def dr_dataframe(model=1, teams=None, season=None, month=None, bet=False):
     return df
 
 
-def player_dataframe(player, season=None):
+def player_dataframe(season=None):
     """
-    Create a dataframe for player stats
-    :param player: player id
+    Create a Pandas DataFrame for player game logs
+
     :param season: NBA Season
-    :return: Pandas DataFrame
+    :return: DataFrame
     """
 
     # MongoDB
     mongo = mongo_utils.MongoDB()
 
+    dc = dc_dataframe(season=season)
+
     fields = {
-        'home': '$home.team',
-        'away': '$away.team',
-        'home_player': '$players.home.' + player + '.pts',
-        'away_player': '$players.away.' + player + '.pts',
-        'date': 1
+        'players': '$players'
     }
 
     match = {}
@@ -290,41 +288,37 @@ def player_dataframe(player, season=None):
     pipeline = [
         {'$project': fields},
         {'$match': match},
-        {'$sort': {'date': 1}}
+        {'$sort': {'date': 1}},
+        {'$unwind': '$players'},
+        {'$group': {'_id': {'game': '$_id', 'player': '$players.player'},
+                    'ppts': {'$first': '$players.pts'},
+                    'phome': {'$first': '$players.home'}}}
     ]
 
     games = mongo.aggregate('game_log', pipeline)
 
-    # Create DataFrame
     df = pd.DataFrame(list(games))
+    df = pd.concat([df.drop(['_id'], axis=1), df['_id'].apply(pd.Series)], axis=1)
 
-    # Drop games the player didn't play
-    df.dropna(subset=['away_player', 'home_player'], how='all', inplace=True)
+    # Change teams into means
+    weeks = dc.groupby('week')
 
-    # Determine if player was home or away
-    df['is_home'] = pd.notnull(df['home_player'])
+    hmean, amean = [], []
 
-    # Combine points into one column
-    df.fillna(0, inplace=True)
-    df['points'] = df['away_player'] + df['home_player']
-    df.drop('away_player', 1, inplace=True)
-    df.drop('home_player', 1, inplace=True)
+    # Convert team names into dixon and coles dynamic abilities
+    for week, stats in weeks:
+        dixon = mongo.find_one('dixon', {'week': int(week)})
 
-    # Conver team names to Dixon Coles means
-    for row in df.itertuples():
+        for row in stats.itertuples():
+            hmean.append(dixon[row.home]['att'] * dixon[row.away]['def'] * dixon['home'] / 100)
+            amean.append(dixon[row.away]['att'] * dixon[row.home]['def'] / 100)
 
-        a = mongo.find_one('dixon', {'min_date': {'$lte': row.date}, 'max_date': {'$gte': row.date}})
+    dc['home'] = hmean
+    dc['away'] = amean
 
-        try:
-            df.set_value(row.Index, 'home', a[row.home]['att'] * a[row.away]['def'] * a['home'])
-            df.set_value(row.Index, 'away', a[row.away]['att'] * a[row.home]['def'])
-        except TypeError:
-            pass
+    df = df.merge(dc, left_on='game', right_on='_id', how='inner')
 
-    # Drop irrelevant columns
-    try:
-        df.drop(['_id', 'date', 'season'], 1, inplace=True)
-    except ValueError:
-        df.drop(['_id', 'date'], 1, inplace=True)
+    for key in ['_id', 'game', 'apts', 'hpts', 'date']:
+        del df[key]
 
     return df

@@ -174,20 +174,22 @@ def dynamic_dixon_coles():
     weeks_df = rest_df.groupby('week')
 
     # Recalculate the Dixon Coles parameters every week after adding the previous week to the dataset
-    for t in weeks_df.groups:
-
-        opt = minimize(dixon_coles, x0=a0, args=(start_df, 30, t, 0.024),
+    for week, stats in weeks_df:
+        # Get team parameters for the current week
+        opt = minimize(dixon_coles, x0=a0, args=(start_df, 30, week, 0.024),
                        constraints=con, method='SLSQP')
-
         abilities = convert_abilities(opt.x, 0, teams)
 
-        week = weeks_df.get_group(t)
-        date = set()
-
-        for row in week.itertuples():
-            date.add(row.date.to_pydatetime())
-            start_df.append(week, ignore_index=True, in_place=True)
-
-        abilities['min_date'] = min(date)
-        abilities['max_date'] = max(date)
+        # Store weekly abilities
+        abilities['week'] = int(week)
         mongo.insert('dixon', abilities)
+
+        # Append this week to the database
+        start_df = start_df.append(stats, ignore_index=True)
+
+
+def player_dixon_coles(params, games, week, time):
+    likelihood = poisson.logpmf(games['ppts'], params[0])
+    weight = np.exp(-time * (week - games['week']))
+
+    return -np.dot(likelihood, weight)

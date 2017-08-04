@@ -136,12 +136,9 @@ def player_box_score(game_id):
     # The ids of the tables have team names in them
     table_id = re.compile('^box_[a-z]{3}_basic$')
 
-    box_score = {
-        'home': {},
-        'away': {}
-    }
+    box_score = []
 
-    team = 'away'
+    home = False
 
     for table in soup.find_all(id=table_id):
         sub_table = table.find('tbody')
@@ -154,15 +151,18 @@ def player_box_score(game_id):
             player_id = player.find('th')
             player_id = player_id['data-append-csv']
 
+            player_stats['player'] = player_id
+            player_stats['home'] = home
+
             # Loop through each stat
             for stat in player.find_all('td'):
                 player_stats[stat['data-stat']] = scrape_utils.stat_parse(stat['data-stat'], stat.string)
 
             # If this key exists it means the player did not play
             if 'reason' not in player_stats:
-                box_score[team][player_id] = player_stats
+                box_score.append(player_stats)
 
-        team = 'home'
+        home = True
 
     # Insert into database
     mongo.update('game_log', {'_id': game_id}, {'$set': {'players': box_score}})

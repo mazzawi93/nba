@@ -1,8 +1,8 @@
-from db import datasets
-from scipy.stats import poisson
-from db import mongo_utils
 import numpy as np
-import matplotlib.pyplot as plt
+from scipy.stats import poisson
+
+from db import datasets
+from db import mongo_utils
 
 
 def determine_probabilities(hmean, amean):
@@ -95,6 +95,6 @@ def dixon_prediction(season, abilities=None, r = 1):
     aprofit = np.dot(bet_away.astype(int), np.where(test['apts'] > test['hpts'], test['abet'], 0))
     profit = hprofit + aprofit
 
-    exp_return = profit / (sum(bet_home) + sum(bet_away))
+    roi = profit / (sum(bet_home) + sum(bet_away)) * 100
 
-    return correct, exp_return
+    return correct, roi
