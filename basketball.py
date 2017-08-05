@@ -36,7 +36,6 @@ class Basketball:
         Test the optimized model against a testing set and apply a betting strategy
 
         :param season: NBA Season(s)
-        :param display: Print the results as they happen
         :return: Number of correct predictions and number of games by percentage
         """
 
@@ -156,23 +155,3 @@ class DixonRobinson(Basketball):
 
         # SciPy minimization requires a numpy array for all abilities, so convert them to readable dict
         self.abilities = dr.convert_abilities(self.opt.x, model, self.teams)
-
-
-class Players:
-    def __init__(self, xi=0):
-
-        df = datasets.player_dataframe([2013, 2014, 2015, 2016])
-
-        # Remove players that have played in less than 10 games
-        df = df.groupby('player').filter(lambda x: len(x) > 10)
-
-        # Group rows by player
-        player_stats = df.groupby('player')
-
-        # Player abilities
-        self.players = {}
-
-        for name, group in player_stats:
-
-            opt = minimize(dr.player_dixon_coles, x0=group.ppts.mean(), args=(group, df['week'].max() + 28, xi))
-            self.players[name] = opt.x[0]

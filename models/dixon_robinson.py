@@ -1,6 +1,6 @@
 import numpy as np
-from scipy.stats import poisson
 from scipy.optimize import minimize
+from scipy.stats import poisson
 
 from db import mongo_utils, process_utils, datasets
 
@@ -181,6 +181,8 @@ def dynamic_dixon_coles():
         abilities = convert_abilities(opt.x, 0, teams)
 
         # Store weekly abilities
+        abilities['min_date'] = stats.date.min()
+        abilities['max_date'] = stats.date.max()
         abilities['week'] = int(week)
         mongo.insert('dixon', abilities)
 
@@ -189,7 +191,47 @@ def dynamic_dixon_coles():
 
 
 def player_dixon_coles(params, games, week, time):
-    likelihood = poisson.logpmf(games['ppts'], params[0])
+    likelihood = poisson.logpmf(games['pts'], params[0])
     weight = np.exp(-time * (week - games['week']))
 
     return -np.dot(likelihood, weight)
+
+
+def dynamic_player_poisson():
+
+    # Mongo DB
+    mongo = mongo_utils.MongoDB()
+
+    # Datasets
+    start_df = datasets.player_dataframe(2013)
+    rest_df = datasets.player_dataframe([2014,2015,2016,2017])
+
+    # Group them by weeks
+    weeks_df = rest_df.groupby('week')
+
+    for week, stats in weeks_df:
+
+        players_df = start_df.groupby('player')
+        players = {'week': int(week)}
+        for name, games in players_df:
+
+            if games.pts.mean() == 0:
+                players[str(name)] = 0
+            else:
+                opt = minimize(player_dixon_coles, x0=games.pts.mean(), args=(games, week, 0.024))
+
+                if opt.x[0] < 0:
+                    opt.x[0] = 0
+
+                players[str(name)] = opt.x[0]
+
+        mongo.insert('player_poisson', players)
+
+        # Append this week to the dataframe
+        start_df = start_df.append(stats, ignore_index=True)
+
+
+
+
+
+

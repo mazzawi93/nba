@@ -142,7 +142,7 @@ def create_test_set(t, g, margin, dr=True):
     return pd.DataFrame(data)
 
 
-def dc_dataframe(teams=None, season=None, month=None, bet=False):
+def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=False):
     """
     Create a Pandas DataFrame for the Dixon and Coles model that uses final scores only.
     Can specify the NBA season, month and if betting information should be included.
@@ -197,6 +197,31 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False):
 
         df['home'] = pd.Series(hi, index=df.index)
         df['away'] = pd.Series(ai, index=df.index)
+
+    # Get the dynamic dixon coles abilities for each team
+    if abilities:
+
+        hmean = np.array([])
+        amean = np.array([])
+
+        weeks = df.groupby('week')
+
+        for week, games in weeks:
+            abilities = mongo.find_one('dixon', {'week': int(week)})
+
+            # Home Team Advantage
+            home_adv = abilities.pop('home')
+
+            abilities = pd.DataFrame.from_dict(abilities)
+
+            home = np.array(abilities[games.home])
+            away = np.array(abilities[games.away])
+
+            hmean = np.append(hmean, home[0] * away[1] * home_adv)
+            amean = np.append(amean, home[1] * away[0])
+
+        df['hmean'] = hmean
+        df['amean'] = amean
 
     del df['season']
 
@@ -264,10 +289,11 @@ def dr_dataframe(model=1, teams=None, season=None, month=None, bet=False):
     return df
 
 
-def player_dataframe(season=None):
+def player_dataframe(season=None, teams=False, poisson=True, abilities=False):
     """
     Create a Pandas DataFrame for player game logs
 
+    :param teams: Include team parameters in the dataset
     :param season: NBA Season
     :return: DataFrame
     """
@@ -275,24 +301,37 @@ def player_dataframe(season=None):
     # MongoDB
     mongo = mongo_utils.MongoDB()
 
-    dc = dc_dataframe(season=season)
-
     fields = {
-        'players': '$players'
+        'players': '$players',
+        'week': {'$add': [{'$week': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2010]}, 52]}]},
+        'date': 1
     }
 
     match = {}
 
     process_utils.season_check(season, fields, match)
 
+    player_stats = {'date': 1,
+                    'phome': '$player.home',
+                    'week': 1
+                    }
+
+    if poisson:
+        player_stats['pts'] = '$player.pts'
+    else:
+        player_stats['fgmiss'] = {'$subtract': ['$player.fga', '$player.fg']}
+        player_stats['fg'] = '$player.fg'
+
     pipeline = [
         {'$project': fields},
         {'$match': match},
-        {'$sort': {'date': 1}},
         {'$unwind': '$players'},
         {'$group': {'_id': {'game': '$_id', 'player': '$players.player'},
-                    'ppts': {'$first': '$players.pts'},
-                    'phome': {'$first': '$players.home'}}}
+                    'player': {'$first': '$players'},
+                    'week': {'$first': '$week'},
+                    'date': {'$first': '$date'}}},
+        {'$project': player_stats},
+        # {'$sort': {'date': 1}}
     ]
 
     games = mongo.aggregate('game_log', pipeline)
@@ -300,25 +339,29 @@ def player_dataframe(season=None):
     df = pd.DataFrame(list(games))
     df = pd.concat([df.drop(['_id'], axis=1), df['_id'].apply(pd.Series)], axis=1)
 
-    # Change teams into means
-    weeks = dc.groupby('week')
+    if teams:
+        dc = dc_dataframe(season=season, abilities=True)
+        df = df.merge(dc, left_on='game', right_on='_id', how='inner')
 
-    hmean, amean = [], []
+        for key in ['_id', 'week_y', 'date_y']:
+            del df[key]
 
-    # Convert team names into dixon and coles dynamic abilities
-    for week, stats in weeks:
-        dixon = mongo.find_one('dixon', {'week': int(week)})
+        df.rename(columns={'week_x': 'week', 'date_x': 'date'}, inplace=True)
 
-        for row in stats.itertuples():
-            hmean.append(dixon[row.home]['att'] * dixon[row.away]['def'] * dixon['home'] / 100)
-            amean.append(dixon[row.away]['att'] * dixon[row.home]['def'] / 100)
+    if abilities:
 
-    dc['home'] = hmean
-    dc['away'] = amean
+        weeks = df.groupby('week')
 
-    df = df.merge(dc, left_on='game', right_on='_id', how='inner')
+        df['mean'] = 0
 
-    for key in ['_id', 'game', 'apts', 'hpts', 'date']:
-        del df[key]
+        for week, games in weeks:
+
+            abilities = mongo.find_one('player_poisson', {'week': int(week)})
+            abilities = pd.DataFrame.from_dict(abilities, 'index')
+
+            mean = abilities.loc[games['player']][0]
+            df.loc[games.index, 'mean'] = np.array(mean)
+
+        df.fillna(0, inplace=True)
 
     return df
