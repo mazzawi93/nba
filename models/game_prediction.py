@@ -1,49 +1,21 @@
 import numpy as np
-from scipy.stats import poisson
+from scipy.stats import beta
 
 from db import datasets
-from db import mongo_utils
-import sklearn.metrics
+from models import prediction_utils as pu
 
 
-def determine_probabilities(hmean, amean):
-    """
-    Determine the probabilities of 2 teams winning a game
-    :param hmean: Home team poisson mean
-    :param amean: Away team poisson mean
-    :return: Probabilities of home and away team
-    """
-
-    # Possible scores
-    scores = np.arange(0, 200)
-
-    hprob = np.zeros(len(scores))
-    aprob = np.zeros(len(scores))
-
-    # The probability for the home team is the sum of the poisson probabilities when h > a and
-    # vice versa for the away team
-    for x in scores:
-        hprob[x] = np.sum(poisson.pmf(mu=hmean, k=x) * poisson.pmf(mu=amean, k=np.where(scores < x)))
-        aprob[x] = np.sum(poisson.pmf(mu=amean, k=x) * poisson.pmf(mu=hmean, k=np.where(scores < x)))
-
-    # Return sum
-    return np.sum(hprob), np.sum(aprob)
-
-
-def dixon_prediction(season, abilities=None, r=1):
+def dixon_prediction(season, abilities=None):
     """
     Dixon Coles or Robinson game prediction based off the team probabilities.
 
     The team with the highest probability of winning is chosen as the winner
 
-    :return: Number of correct predictions and number of games by percentage
+    :return: Accuracy, betting return on investment
     """
 
-    # Mongo DB
-    mongo = mongo_utils.MongoDB()
-
     # Testing Dataset
-    test = datasets.dc_dataframe(season=season, bet=True)
+    test = datasets.dc_dataframe(season=season, bet=True, abilities=True)
 
     # ngames = np.zeros(100)
     # ncorrect = np.zeros(100)
@@ -52,7 +24,6 @@ def dixon_prediction(season, abilities=None, r=1):
     aprob = np.zeros(len(test))
 
     # Iterate through each game to determine the winner and prediction
-    # TODO: Make this faster
     for row in test.itertuples():
 
         if abilities is not None:
@@ -62,7 +33,7 @@ def dixon_prediction(season, abilities=None, r=1):
             hmean = row.hmean
             amean = row.amean
 
-        hprob[row.Index], aprob[row.Index] = determine_probabilities(hmean, amean)
+        hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(hmean, amean)
 
     # Actual winners and predictions
     winners = np.where(test.hpts > test.apts, test.home, test.away)
@@ -75,55 +46,87 @@ def dixon_prediction(season, abilities=None, r=1):
     #    ncorrect[int(predict_prob * 100)] += 1
     # ngames[int(predict_prob * 100)] += 1
 
-    # Probabilities set by betting odds
-    hbp = 1 / test['hbet']
-    abp = 1 / test['abet']
+    roi = pu.betting(hprob, aprob, test)
 
-    # Bookmakers 'take'
-    take = hbp + abp
-
-    # Rescale odds so they add to 1
-    hbp = hbp / take
-    abp = abp / take
-
-    # Bet on home and away teams
-    bet_home = hprob / hbp > r
-    bet_away = aprob / abp > r
-
-    hprofit = np.dot(bet_home.astype(int), np.where(test['hpts'] > test['apts'], test['hbet'], 0))
-    aprofit = np.dot(bet_away.astype(int), np.where(test['apts'] > test['hpts'], test['abet'], 0))
-    profit = hprofit + aprofit
-
-    roi = profit / (sum(bet_home) + sum(bet_away)) * 100
-
-    return correct, roi
+    return sum(correct) / len(test), np.array(roi)
 
 
-def dixon_coles_score_error(season):
-    df = datasets.dc_dataframe(season=season, abilities=True)
+def player_poisson_prediction(season):
+    """
+    Prediction using Dixon Coles team abilities and player poisson means
 
-    true = np.append(df['hpts'], df['apts'])
-    pred = np.append(df['hmean'], df['amean'])
-
-    print("MSE = %f" % sklearn.metrics.mean_squared_error(true, pred))
-    print("MAE = %f" % sklearn.metrics.mean_absolute_error(true, pred))
+    :param season: NBA season
+    :return: Accuracy, betting return on investment
+    """
 
 
-def player_team_dixon(season):
-    players = datasets.player_dataframe(season=season, teams=True, abilities=True)
+    # Datasets
+    test = datasets.dc_dataframe(season=season, abilities=True, bet=True)
+    players = datasets.player_dataframe(season=season, poisson=True)
 
-    games = players.groupby('game')
+    test['hpm'] = 0
+    test['apm'] = 0
 
-    he, ae = 0, 0
+    for _id, stats in players.groupby('game'):
+        # Poisson means by summing up the player ones
+        hp = np.sum(np.where(stats['phome'], stats['mean'], 0))
+        ap = np.sum(np.where(stats['phome'], 0, stats['mean']))
 
-    for _id, stats in games:
-        home_player = np.where(stats['phome'], stats['mean'], 0)
-        away_player = np.where(stats['phome'], 0, stats['mean'])
+        index = test[test._id == _id].index[0]
 
-        he += (np.sum(home_player) - stats['hmean'].mean()) ** 2
-        ae += (np.sum(away_player) - stats['amean'].mean()) ** 2
+        # Set the values in the game dataset
+        test.loc[index, 'hpm'] = hp
+        test.loc[index, 'apm'] = ap
 
-    he = he / games.size().__len__()
-    ae = ae / games.size().__len__()
+    hprob, aprob = np.zeros(len(test)), np.zeros(len(test))
 
-    return he, ae
+    for row in test.itertuples():
+        hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.hpm, row.apm)
+
+    winners = np.where(test.hpts > test.apts, test.home, test.away)
+    prediction = np.where(hprob > aprob, test.home, test.away)
+
+    correct = np.equal(winners, prediction)
+
+    roi = pu.betting(hprob, aprob, test)
+
+    return sum(correct) / len(test), np.array(roi)
+
+
+def player_beta_prediction(season):
+    """
+    Prediction using Dixon Coles Team abilities and player beta distributions
+
+    :param season: NBA Season
+    :return: Accuracy, betting return on investment
+    """
+
+    # Datasets
+    test = datasets.dc_dataframe(season=season, abilities=True, bet=True)
+    players = datasets.player_dataframe(season=season, beta=True)
+
+    test['hbeta'] = 0
+    test['abeta'] = 0
+
+    # Get beta means for each game
+    for _id, stats in players.groupby('game'):
+        hbeta = np.sum(np.nan_to_num(np.where(stats.phome, beta.mean(stats.a, stats.b), 0)))
+        abeta = np.sum(np.nan_to_num(np.where(stats.phome, 0, beta.mean(stats.a, stats.b))))
+
+        index = test[test._id == _id].index[0]
+
+        test.loc[index, 'hbeta'] = hbeta
+        test.loc[index, 'abeta'] = abeta
+
+    hprob, aprob = np.zeros(len(test)), np.zeros(len(test))
+
+    for row in test.itertuples():
+        hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.hmean * row.hbeta, row.amean * row.abeta)
+
+    winners = np.where(test.hpts > test.apts, test.home, test.away)
+    prediction = np.where(hprob > aprob, test.home, test.away)
+    correct = np.equal(winners, prediction)
+
+    roi = pu.betting(hprob, aprob, test)
+
+    return sum(correct) / len(test), roi

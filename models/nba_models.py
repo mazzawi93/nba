@@ -1,92 +1,8 @@
 import numpy as np
 from scipy.optimize import minimize
-from scipy.stats import poisson
+from scipy.stats import poisson, beta
 
 from db import mongo_utils, process_utils, datasets
-
-
-def attack_constraint(params, constraint, nteams):
-    """
-    Attack parameter constraint for the likelihood functions
-    The Mean of the attack parameters must equal 100
-
-    :param constraint: The mean for attack
-    :param params: Team Parameters (Attack, Defense and Home Rating)
-    :param nteams: The number of teams
-    :return: The mean of the attack - 100
-    """
-
-    return sum(params[:nteams]) / nteams - constraint
-
-
-def defense_constraint(params, constraint, nteams):
-    """
-    Attack parameter constraint for the likelihood functions
-    The Mean of the attack parameters must equal 100
-
-    :param constraint: Mean for defense
-    :param params: Team Parameters (Attack, Defense and Home Rating)
-    :param nteams: The number of teams
-    :return: The mean of the attack - 100
-    """
-
-    return sum(params[nteams:nteams * 2]) / nteams - constraint
-
-
-def initial_guess(model, nteams):
-    """
-    Create an initial guess for the minimization function
-    :param model: The model implemented (0: DC, 1: Base DR model, 2: Time Parameters, 3: winning/losing)
-    :return: Numpy array of team abilities (Attack, Defense) and Home Advantage and other factors
-    """
-
-    # Attack and Defence parameters
-    att = np.full((1, nteams), 100, dtype=float)
-    defense = np.full((1, nteams), 1, dtype=float)
-    teams = np.append(att, defense)
-
-    # The time parameters are added to the model
-    if model == 2:
-        params = np.full((1, 5), 1.05, dtype=float)
-    else:
-        params = np.full((1, 1), 1.05, dtype=float)
-
-    return np.append(teams, params)
-
-
-def convert_abilities(opt, model, teams):
-    """
-    Convert the numpy abilities array into a more usable dict
-    :param opt: Abilities from optimization
-    :param model: Model number determines which parameters are included (0 is Dixon Coles)
-    """
-    abilities = {'model': model}
-
-    i = 0
-
-    nteams = len(teams)
-
-    # Attack and defense
-    for team in teams:
-        abilities[team] = {
-            'att': opt[i],
-            'def': opt[i + nteams]
-        }
-        i += 1
-
-    # Home Advantage
-    abilities['home'] = opt[nteams * 2]
-
-    # Time parameters
-    if model >= 2:
-        abilities['time'] = {
-            'q1': opt[nteams * 2 + 1],
-            'q2': opt[nteams * 2 + 2],
-            'q3': opt[nteams * 2 + 3],
-            'q4': opt[nteams * 2 + 4]
-        }
-
-    return abilities
 
 
 def dixon_coles(params, games, nteams, week, time):
@@ -150,7 +66,7 @@ def dixon_robinson(params, games, nteams, model):
 
 def dynamic_dixon_coles():
     """
-    Computer the team abilities for every week by combining the datasets and using the time value,
+    Computes the team abilities for every week by combining the datasets and using the time value,
     starting with the 2013 season as the base values for teams.
     """
 
@@ -190,21 +106,31 @@ def dynamic_dixon_coles():
         start_df = start_df.append(stats, ignore_index=True)
 
 
-def player_dixon_coles(params, games, week, time):
+def player_poisson(params, games, week, time):
+    """
+    Likelihood function to determine player poisson mean
+
+    :return: Likelihood
+    """
+
     likelihood = poisson.logpmf(games['pts'], params[0])
     weight = np.exp(-time * (week - games['week']))
 
     return -np.dot(likelihood, weight)
 
 
-def dynamic_player_poisson():
+def dynamic_poisson():
+    """
+    Compute weekly player poisson means.
+
+    """
 
     # Mongo DB
     mongo = mongo_utils.MongoDB()
 
     # Datasets
     start_df = datasets.player_dataframe(2013)
-    rest_df = datasets.player_dataframe([2014,2015,2016,2017])
+    rest_df = datasets.player_dataframe([2014, 2015, 2016, 2017])
 
     # Group them by weeks
     weeks_df = rest_df.groupby('week')
@@ -231,7 +157,51 @@ def dynamic_player_poisson():
         start_df = start_df.append(stats, ignore_index=True)
 
 
+def player_beta(params, pts, tpts, weeks, week_num, time):
+    """
+    Likelihood function to determine player beta distribution parameters
+
+    :return: Likelihood
+    """
+    likelihood = beta.logpdf(pts / tpts, params[0], params[1])
+    weight = np.exp(-time * (week_num - weeks))
+
+    return -np.dot(likelihood, weight)
 
 
+def dynamic_beta():
+    """
+    Compute weekly player beta parameters
 
+    """
 
+    # Mongo DB
+    mongo = mongo_utils.MongoDB()
+
+    # Datasets
+    start_df = datasets.player_dataframe(2013, teams=True)
+    rest_df = datasets.player_dataframe([2014, 2015, 2016, 2017], teams=True)
+
+    # Group them by weeks
+    weeks_df = rest_df.groupby('week')
+
+    for week, stats in weeks_df:
+
+        players_df = start_df.groupby('player')
+        players = {'week': int(week)}
+
+        for name, games in players_df:
+
+            team_pts = np.where(games.phome, games.hpts, games.apts)
+            a0 = np.array([games.pts.mean(), (team_pts - games.pts).mean()])
+
+            opt = minimize(beta_distribution, x0=a0, args=(games.pts, team_pts, games.week, int(week), 0.024))
+
+            if opt.status == 2:
+                players[str(name)] = {'a': a0[0], 'b': a0[1]}
+            else:
+                players[str(name)] = {'a': opt.x[0], 'b': opt.x[1]}
+
+        mongo.insert('player_beta', players)
+
+        start_df = start_df.append(stats, ignore_index=True)

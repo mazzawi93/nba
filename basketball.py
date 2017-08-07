@@ -6,8 +6,44 @@ from scipy.stats import poisson
 
 from db import datasets
 from db import process_utils
-from models import dixon_robinson as dr
+from models import nba_models as nba
 from models.game_prediction import dixon_prediction
+from models import prediction_utils as pu
+
+
+def convert_abilities(opt, model, teams):
+    """
+    Convert the numpy abilities array into a more usable dict
+    :param opt: Abilities from optimization
+    :param model: Model number determines which parameters are included (0 is Dixon Coles)
+    """
+    abilities = {'model': model}
+
+    i = 0
+
+    nteams = len(teams)
+
+    # Attack and defense
+    for team in teams:
+        abilities[team] = {
+            'att': opt[i],
+            'def': opt[i + nteams]
+        }
+        i += 1
+
+    # Home Advantage
+    abilities['home'] = opt[nteams * 2]
+
+    # Time parameters
+    if model >= 2:
+        abilities['time'] = {
+            'q1': opt[nteams * 2 + 1],
+            'q2': opt[nteams * 2 + 2],
+            'q3': opt[nteams * 2 + 3],
+            'q4': opt[nteams * 2 + 4]
+        }
+
+    return abilities
 
 
 class Basketball:
@@ -26,8 +62,8 @@ class Basketball:
         self.season = season
         self.teams = process_utils.name_teams(False, 30)
 
-        self.con = [{'type': 'eq', 'fun': dr.attack_constraint, 'args': (100, self.nteams,)},
-                    {'type': 'eq', 'fun': dr.defense_constraint, 'args': (1, self.nteams,)}]
+        self.con = [{'type': 'eq', 'fun': pu.attack_constraint, 'args': (100, self.nteams,)},
+                    {'type': 'eq', 'fun': pu.defense_constraint, 'args': (1, self.nteams,)}]
 
         self.abilities = None
 
@@ -67,13 +103,13 @@ class DixonColes(Basketball):
         self.dataset = datasets.dc_dataframe(self.teams, season)
 
         # Initial Guess for the minimization
-        a0 = dr.initial_guess(0, self.nteams)
+        a0 = pu.initial_guess(0, self.nteams)
 
         # Time the optimization
         start = time.time()
 
         # Minimize the likelihood function
-        self.opt = minimize(dr.dixon_coles, x0=a0,
+        self.opt = minimize(nba.dixon_coles, x0=a0,
                             args=(self.dataset, self.nteams, self.dataset['week'].max() + 28, xi),
                             constraints=self.con, method='SLSQP')
 
@@ -81,7 +117,7 @@ class DixonColes(Basketball):
         print("Time: %f" % (end - start))
 
         # SciPy minimization requires a numpy array for all abilities, so convert them to readable dict
-        self.abilities = dr.convert_abilities(self.opt.x, 0, self.teams)
+        self.abilities = convert_abilities(self.opt.x, 0, self.teams)
 
     def find_time_param(self):
         """
@@ -141,17 +177,17 @@ class DixonRobinson(Basketball):
         self.dataset = datasets.dr_dataframe(model, self.teams, season)
 
         # Initial Guess for the minimization
-        a0 = dr.initial_guess(model, self.nteams)
+        a0 = pu.initial_guess(model, self.nteams)
 
         # Time the optimization
         start = time.time()
 
         # Minimize the likelihood function
-        self.opt = minimize(dr.dixon_robinson, x0=a0, args=(self.dataset, self.nteams, model),
+        self.opt = minimize(nba.dixon_robinson, x0=a0, args=(self.dataset, self.nteams, model),
                             constraints=self.con)
 
         end = time.time()
         print("Time: %f" % (end - start))
 
         # SciPy minimization requires a numpy array for all abilities, so convert them to readable dict
-        self.abilities = dr.convert_abilities(self.opt.x, model, self.teams)
+        self.abilities = convert_abilities(self.opt.x, model, self.teams)
