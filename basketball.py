@@ -11,41 +11,6 @@ from models.game_prediction import dixon_prediction
 from models import prediction_utils as pu
 
 
-def convert_abilities(opt, model, teams):
-    """
-    Convert the numpy abilities array into a more usable dict
-    :param opt: Abilities from optimization
-    :param model: Model number determines which parameters are included (0 is Dixon Coles)
-    """
-    abilities = {'model': model}
-
-    i = 0
-
-    nteams = len(teams)
-
-    # Attack and defense
-    for team in teams:
-        abilities[team] = {
-            'att': opt[i],
-            'def': opt[i + nteams]
-        }
-        i += 1
-
-    # Home Advantage
-    abilities['home'] = opt[nteams * 2]
-
-    # Time parameters
-    if model >= 2:
-        abilities['time'] = {
-            'q1': opt[nteams * 2 + 1],
-            'q2': opt[nteams * 2 + 2],
-            'q3': opt[nteams * 2 + 3],
-            'q4': opt[nteams * 2 + 4]
-        }
-
-    return abilities
-
-
 class Basketball:
     """
     Basketball class used to manipulate team abilities and simulate upcoming seasons

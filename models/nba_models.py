@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.optimize import minimize
 from scipy.stats import poisson, beta
+from models import prediction_utils as pu
 
 from db import mongo_utils, process_utils, datasets
 
@@ -80,11 +81,11 @@ def dynamic_dixon_coles():
     rest_df = datasets.dc_dataframe(teams, [2014, 2015, 2016, 2017])
 
     # Dixon Constraint
-    con = [{'type': 'eq', 'fun': attack_constraint, 'args': (100, 30,)},
-           {'type': 'eq', 'fun': defense_constraint, 'args': (1, 30,)}]
+    con = [{'type': 'eq', 'fun': pu.attack_constraint, 'args': (100, 30,)},
+           {'type': 'eq', 'fun': pu.defense_constraint, 'args': (1, 30,)}]
 
     # Initial Guess
-    a0 = initial_guess(0, 30)
+    a0 = pu.initial_guess(0, 30)
 
     # Group them by weeks
     weeks_df = rest_df.groupby('week')
@@ -94,7 +95,7 @@ def dynamic_dixon_coles():
         # Get team parameters for the current week
         opt = minimize(dixon_coles, x0=a0, args=(start_df, 30, week, 0.024),
                        constraints=con, method='SLSQP')
-        abilities = convert_abilities(opt.x, 0, teams)
+        abilities = pu.convert_abilities(opt.x, 0, teams)
 
         # Store weekly abilities
         abilities['min_date'] = stats.date.min()
@@ -144,7 +145,7 @@ def dynamic_poisson():
             if games.pts.mean() == 0:
                 players[str(name)] = 0
             else:
-                opt = minimize(player_dixon_coles, x0=games.pts.mean(), args=(games, week, 0.024))
+                opt = minimize(player_poisson, x0=games.pts.mean(), args=(games, week, 0.024))
 
                 if opt.x[0] < 0:
                     opt.x[0] = 0
@@ -195,7 +196,7 @@ def dynamic_beta():
             team_pts = np.where(games.phome, games.hpts, games.apts)
             a0 = np.array([games.pts.mean(), (team_pts - games.pts).mean()])
 
-            opt = minimize(beta_distribution, x0=a0, args=(games.pts, team_pts, games.week, int(week), 0.024))
+            opt = minimize(player_beta, x0=a0, args=(games.pts, team_pts, games.week, int(week), 0.024))
 
             if opt.status == 2:
                 players[str(name)] = {'a': a0[0], 'b': a0[1]}
@@ -205,3 +206,46 @@ def dynamic_beta():
         mongo.insert('player_beta', players)
 
         start_df = start_df.append(stats, ignore_index=True)
+
+
+def find_best_player():
+    """
+    Find each teams best player going into a game
+    """
+
+    # Mongo
+    mongo = mongo_utils.MongoDB()
+
+    # Datasets
+    df = datasets.player_dataframe([2014, 2015, 2016, 2017], beta=True, teams=True)
+
+    # Group them by weeks
+    weeks_df = df.groupby('week')
+
+    for week, stats in weeks_df:
+
+        teams = {'week': int(week)}
+
+        for team, games in stats.groupby('home'):
+
+            hbeta = np.nan_to_num(np.where(games.phome, beta.mean(games.a, games.b), 0))
+            hplayer = np.where(games.phome, games.player, '')
+
+            teams[team] = {'player': hplayer[hbeta.argmax()], 'mean': hbeta.max()}
+
+        for team, games in stats.groupby('away'):
+
+            abeta = np.nan_to_num(np.where(games.phome, 0, beta.mean(games.a, games.b)))
+            aplayer = np.where(games.phome, '', games.player)
+
+            if team not in teams:
+                teams[team] = {'player': aplayer[abeta.argmax()], 'mean': abeta.max()}
+            else:
+                if abeta.max() > teams[team]['mean']:
+                    teams[team] = {'player': aplayer[abeta.argmax()], 'mean': abeta.max()}
+
+        mongo.insert('team_best_player', teams)
+
+
+
+

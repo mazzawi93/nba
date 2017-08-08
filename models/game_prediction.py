@@ -46,9 +46,9 @@ def dixon_prediction(season, abilities=None):
     #    ncorrect[int(predict_prob * 100)] += 1
     # ngames[int(predict_prob * 100)] += 1
 
-    roi = pu.betting(hprob, aprob, test)
+    roi, profit = pu.betting(hprob, aprob, test)
 
-    return sum(correct) / len(test), np.array(roi)
+    return sum(correct) / len(test), np.array(roi), np.array(profit)
 
 
 def player_poisson_prediction(season):
@@ -88,9 +88,9 @@ def player_poisson_prediction(season):
 
     correct = np.equal(winners, prediction)
 
-    roi = pu.betting(hprob, aprob, test)
+    roi, profit = pu.betting(hprob, aprob, test)
 
-    return sum(correct) / len(test), np.array(roi)
+    return sum(correct) / len(test), np.array(roi), np.array(profit)
 
 
 def player_beta_prediction(season):

@@ -298,6 +298,7 @@ def player_dataframe(season=None, teams=False, poisson=False, beta=False, team_a
     :param poisson: Include player poisson mean
     :param teams: Include team parameters in the dataset
     :param season: NBA Season
+    :param nba_team: NBA team
 
     :return: DataFrame
     """
@@ -308,7 +309,7 @@ def player_dataframe(season=None, teams=False, poisson=False, beta=False, team_a
     fields = {
         'players': '$players',
         'week': {'$add': [{'$week': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2010]}, 52]}]},
-        'date': 1
+        'date': 1,
     }
 
     match = {}

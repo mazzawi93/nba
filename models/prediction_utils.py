@@ -48,6 +48,7 @@ def betting(hprob, aprob, df):
     abp = abp / take
 
     roi = []
+    profit = []
 
     for value in r:
         # Bet on ome and away teams
@@ -59,8 +60,9 @@ def betting(hprob, aprob, df):
 
         nbets = sum(bet_home) + sum(bet_away)
         roi.append((np.sum(hp) + np.sum(ap) - nbets) / nbets * 100)
+        profit.append(np.sum(hp) + np.sum(ap) - nbets)
 
-    return roi
+    return roi, profit
 
 
 def attack_constraint(params, constraint, nteams):
@@ -111,3 +113,37 @@ def initial_guess(model, nteams):
 
     return np.append(teams, params)
 
+
+def convert_abilities(opt, model, teams):
+    """
+    Convert the numpy abilities array into a more usable dict
+    :param opt: Abilities from optimization
+    :param model: Model number determines which parameters are included (0 is Dixon Coles)
+    """
+    abilities = {'model': model}
+
+    i = 0
+
+    nteams = len(teams)
+
+    # Attack and defense
+    for team in teams:
+        abilities[team] = {
+            'att': opt[i],
+            'def': opt[i + nteams]
+        }
+        i += 1
+
+    # Home Advantage
+    abilities['home'] = opt[nteams * 2]
+
+    # Time parameters
+    if model >= 2:
+        abilities['time'] = {
+            'q1': opt[nteams * 2 + 1],
+            'q2': opt[nteams * 2 + 2],
+            'q3': opt[nteams * 2 + 3],
+            'q4': opt[nteams * 2 + 4]
+        }
+
+    return abilities
