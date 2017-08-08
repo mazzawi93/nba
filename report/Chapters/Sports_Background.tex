@@ -8,12 +8,37 @@ Basketball is a popular sport played by teams with 5 players on each side.  Seas
 There are 5 players on court per team, each with their own responsibilities summarized below by position \cite{player_criteria}:
 
 \begin{itemize}
-	\item \textbf{Point Guard:} They are the play maker, the ball is usually in their hands.  They organize the team's play and control the intensity of play.
-	\item \textbf{Shooting Guard:}
-	\item \textbf{Small Forward:}
-	\item \textbf{Power Forward:}
-	\item \textbf{Centre:}
+	\item \textbf{Point Guard (PG):} They are the play maker, the ball is usually in their hands.  They organize the team's play and control the intensity of play.
+	\item \textbf{Shooting Guard (SG):} 
+	\item \textbf{Small Forward (SF):}
+	\item \textbf{Power Forward (PF):}
+	\item \textbf{Centre (C):}
 \end{itemize}
+
+Table \ref{table:position_criteria} summarizes the important criteria for each position.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+ & \textbf{PG} & \textbf{SG} & \textbf{SF} & \textbf{PF} & \textbf{C} \\ \hline
+\textbf{Defensive Pressure} & X & X &  &  &  \\ \hline
+\textbf{Transition Defense} & X & X & X &  &  \\ \hline
+\textbf{Ball Control} & X &  &  &  &  \\ \hline
+\textbf{Passing Skills} & X &  &  &  &  \\ \hline
+\textbf{Dribble Penetration} & X & X & X & X & X \\ \hline
+\textbf{Outside Shots} & X & X & X &  &  \\ \hline
+\textbf{Transition Offense} & X & X & X &  &  \\ \hline
+\textbf{Offense without the ball} &  & X & X &  &  \\ \hline
+\textbf{Free Throws} &  & X & X & X & X \\ \hline
+\textbf{Rebounding} &  &  &  & X & X \\ \hline
+\textbf{Inside Shots} &  &  &  & X & X \\ \hline
+\textbf{Screens} &  &  &  & X & X \\ \hline
+\textbf{Drawing Fouls} &  &  &  &  & X \\ \hline
+\end{tabular}
+\caption{Basketball Position Criteria}
+\label{table:position_criteria}
+\end{table}
 
 \section{Prediction in Sports}
 
@@ -33,6 +58,8 @@ Dixon and Robinson extended the model created by Dixon and Coles by modelling go
 
 There is a belief among basketball players and fans that a player will be more likely to score following a previous successful shot rather than a miss.  A survey was conducted of NBA fans, where 91\% of fans believed that a player has a better chance of scoring after having just made his last two or three shots than after missing the same number \citep{nba_hot_hand}.  Shooting records from the Philadelphia 76ers and it's opponents were analysed from the 1980-81 season.   The analysis provided no evidence towards streak shooting.  Free throw data from the Boston Celtics during the 1980-81 and 1981-82 seasons were also analysed to remove the presence of shot selection and defensive pressure.  Again, no evidence was found the second free throw was affected by the first.  \citep{nba_hot_hand} also conducted an experiment with the players from Cornell University as an alternative way to eliminate shot selection and defensive pressure.  The conclusion of the Cornell experiment is that previous shots influenced the players' predictions, but not their performance.  
 
+Team Cohesion \cite{team_cohesion}
+
 Shot selection \cite{nba_spatial_analysis}.
 
 
@@ -49,8 +76,9 @@ There have also been attempts at modelling and analysing player performance in d
 \textit{Player Effciency Rating}
 
 
+Most of basketball advanced metrics have been developed for offence, there have been attempts to model advance defensive metrics \citep{nba_defense}.  Offensive performance is more easily measured due to the number of statistics pertaining scoring.  Although there are stats such as steals, blocks that provide some insight into a player's defensive performance, they do not show the full story.  There has been incredible progress in NBA analytics, where player tracking has hit new levels?.
 
-Most of basketball advanced metrics have been developed for offence \citep{nba_defense}.
+Just as previously discussed, fuzzy systems have been created to predict the performance of a player \cite{nba_fuzzy_prediction_player}.  Positions are broken down so that different stats have higher importance in evaluating performance.
 \section{Mathematical Concepts}
 The following section will describe the mathematical concepts used in the modelling done in this report.
 
@@ -72,4 +100,4 @@ Figure \ref{fig:poisson} shows the probability mass function for the Poisson dis
 
 \subsection{Beta Distribution}
 
-The Beta distribution is to assess probabilities.
+The Beta distribution is a probability distribution defined on the interval $[0, 1]$
