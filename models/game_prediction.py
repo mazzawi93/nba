@@ -1,9 +1,8 @@
 import numpy as np
 from scipy.stats import beta
 
-from db import datasets
+from db import datasets, mongo_utils
 from models import prediction_utils as pu
-
 
 def dixon_prediction(season, abilities=None):
     """
@@ -127,6 +126,66 @@ def player_beta_prediction(season):
     prediction = np.where(hprob > aprob, test.home, test.away)
     correct = np.equal(winners, prediction)
 
-    roi = pu.betting(hprob, aprob, test)
+    roi, profit = pu.betting(hprob, aprob, test)
 
-    return sum(correct) / len(test), roi
+    return sum(correct) / len(test), roi, profit
+
+
+def best_player_prediction(season, best=1):
+
+    mongo = mongo_utils.MongoDB()
+
+    # datasets
+    test = datasets.dc_dataframe(season=season, abilities=True, bet=True)
+    players = datasets.player_dataframe(season=season, teams=True)
+
+    test['hbest'] = 1
+    test['abest'] = 1
+
+    for week, stats in players.groupby('week'):
+
+        bp = mongo.find_one('team_best_player', {'week': int(week)}, {'_id': 0, 'week': 0})
+
+        for _id, game in stats.groupby('game'):
+
+            home = np.where(game.phome, game.player, '')
+            away = np.where(game.phome, '', game.player)
+
+            index = test[test._id == _id].index[0]
+
+            home_team = game.home.unique()[0]
+            away_team = game.away.unique()[0]
+
+            if bp[home_team]['player1'] not in home:
+                test.loc[index, 'hbest'] = 1 - bp[home_team]['mean1']
+
+            if bp[away_team]['player1'] not in away:
+                test.loc[index, 'abest'] = 1 - bp[away_team]['mean1']
+
+
+
+            if best > 1:
+                if bp[home_team]['player2'] not in home:
+                    test.loc[index, 'hbest'] = test.loc[index, 'hbest'] - bp[home_team]['mean2']
+
+
+                if bp[away_team]['player2'] not in away:
+                    test.loc[index, 'abest'] = test.loc[index, 'abest'] - bp[away_team]['mean2']
+
+    hprob, aprob = np.zeros(len(test)), np.zeros(len(test))
+
+    for row in test.itertuples():
+        hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.hmean * row.hbest, row.amean * row.abest)
+
+    winners = np.where(test.hpts > test.apts, test.home, test.away)
+    prediction = np.where(hprob > aprob, test.home, test.away)
+    correct = np.equal(winners, prediction)
+
+    roi, profit = pu.betting(hprob, aprob, test)
+
+    return sum(correct) / len(test), np.array(roi), np.array(profit)
+
+
+
+
+

@@ -208,7 +208,7 @@ def dynamic_beta():
         start_df = start_df.append(stats, ignore_index=True)
 
 
-def find_best_player():
+def find_best_players():
     """
     Find each teams best player going into a game
     """
@@ -227,25 +227,59 @@ def find_best_player():
         teams = {'week': int(week)}
 
         for team, games in stats.groupby('home'):
+            hbeta = np.unique(np.nan_to_num(np.where(games.phome, beta.mean(games.a, games.b), 0)))
+            hplayer = np.unique(np.where(games.phome, games.player, ''))
 
-            hbeta = np.nan_to_num(np.where(games.phome, beta.mean(games.a, games.b), 0))
-            hplayer = np.where(games.phome, games.player, '')
+            teams[team] = {'player1': hplayer[hbeta.argmax()],
+                           'mean1': hbeta.max()}
 
-            teams[team] = {'player': hplayer[hbeta.argmax()], 'mean': hbeta.max()}
+            hplayer = np.delete(hplayer, hbeta.argmax())
+            hbeta = np.delete(hbeta, hbeta.argmax())
+
+            teams[team]['player2'] = hplayer[hbeta.argmax()]
+            teams[team]['mean2'] = hbeta.max()
+
 
         for team, games in stats.groupby('away'):
 
-            abeta = np.nan_to_num(np.where(games.phome, 0, beta.mean(games.a, games.b)))
-            aplayer = np.where(games.phome, '', games.player)
+            abeta = np.unique(np.nan_to_num(np.where(games.phome, 0, beta.mean(games.a, games.b))))
+            aplayer = np.unique(np.where(games.phome, '', games.player))
 
             if team not in teams:
-                teams[team] = {'player': aplayer[abeta.argmax()], 'mean': abeta.max()}
+                teams[team] = {
+                    'player1': aplayer[abeta.argmax()],
+                    'mean1': abeta.max()}
+
+                aplayer = np.delete(aplayer, abeta.argmax())
+                abeta = np.delete(abeta, abeta.argmax())
+
+                teams[team]['player2'] = aplayer[abeta.argmax()]
+                teams[team]['mean2'] = abeta.max()
+
+
+
             else:
-                if abeta.max() > teams[team]['mean']:
-                    teams[team] = {'player': aplayer[abeta.argmax()], 'mean': abeta.max()}
+                if abeta.max() > teams[team]['mean1']:
+
+                    bp = aplayer[abeta.argmax()]
+                    bpm = abeta.max()
+
+                    aplayer = np.delete(aplayer, abeta.argmax())
+                    abeta = np.delete(abeta, abeta.argmax())
+
+                    if abeta.max() > teams[team]['mean2']:
+                        teams[team]['player2'] = aplayer[abeta.argmax()]
+                        teams[team]['mean2'] = abeta.max()
+                    else:
+                        teams[team]['player2'] = teams[team]['player1']
+                        teams[team]['mean2'] = teams[team]['mean1']
+
+                    teams[team]['player1'] = bp
+                    teams[team]['mean1'] = bpm
+
+                elif teams[team]['mean2'] < abeta.max() < teams[team]['mean1']:
+
+                        teams[team]['player2'] = aplayer[abeta.argmax()]
+                        teams[team]['mean2'] = abeta.max()
 
         mongo.insert('team_best_player', teams)
-
-
-
-
