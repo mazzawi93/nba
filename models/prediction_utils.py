@@ -26,6 +26,19 @@ def determine_probabilities(hmean, amean):
     return np.sum(hprob), np.sum(aprob)
 
 
+def iter_probabilities(hmean, amean):
+    hprob, aprob = 0, 0
+    for h in range(60, 140):
+        for a in range(60, 140):
+
+            if h > a:
+                hprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+            elif h < a:
+                aprob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+
+    return hprob, aprob
+
+
 def betting(hprob, aprob, df):
     """
     Determine the return on investment from betting odds

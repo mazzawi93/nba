@@ -289,7 +289,7 @@ def dr_dataframe(model=1, teams=None, season=None, month=None, bet=False):
     return df
 
 
-def player_dataframe(season=None, teams=False, poisson=False, beta=False, team_ability=False):
+def player_dataframe(season=None, teams=False, poisson=False, beta=False, team_ability=False, position=False):
     """
     Create a Pandas DataFrame for player game logs
 
@@ -316,7 +316,7 @@ def player_dataframe(season=None, teams=False, poisson=False, beta=False, team_a
 
     process_utils.season_check(season, fields, match)
 
-    player_stats = {'date': 1, 'phome': '$player.home', 'week': 1, 'pts': '$player.pts'}
+    player_stats = {'date': 1, 'phome': '$player.home', 'week': 1, 'pts': '$player.pts', 'season': 1}
 
     pipeline = [
         {'$project': fields},
@@ -325,6 +325,7 @@ def player_dataframe(season=None, teams=False, poisson=False, beta=False, team_a
         {'$group': {'_id': {'game': '$_id', 'player': '$players.player'},
                     'player': {'$first': '$players'},
                     'week': {'$first': '$week'},
+                    'season': {'$first': '$season'},
                     'date': {'$first': '$date'}}},
         {'$project': player_stats}
     ]
@@ -344,6 +345,11 @@ def player_dataframe(season=None, teams=False, poisson=False, beta=False, team_a
 
         df.rename(columns={'week_x': 'week', 'date_x': 'date'}, inplace=True)
 
+    if position:
+
+        pos_df = player_position(season)
+        df = df.merge(pos_df, left_on=['player', 'season'], right_on=['player', 'season'])
+
     # Player abilities
     if poisson or beta:
 
@@ -355,11 +361,11 @@ def player_dataframe(season=None, teams=False, poisson=False, beta=False, team_a
         if beta:
             df['a'] = 0
             df['b'] = 0
+            df['pteam'] = ''
 
         for week, games in weeks:
 
             if poisson:
-
                 abilities = mongo.find_one('player_poisson', {'week': int(week)})
                 abilities = pd.DataFrame.from_dict(abilities, 'index')
 
@@ -367,14 +373,47 @@ def player_dataframe(season=None, teams=False, poisson=False, beta=False, team_a
                 df.loc[games.index, 'mean'] = np.array(mean)
 
             if beta:
-
                 abilities = mongo.find_one('player_beta', {'week': int(week)}, {'_id': 0, 'week': 0})
                 abilities = pd.DataFrame.from_dict(abilities, 'index')
                 a = abilities.loc[games['player'], 'a']
                 b = abilities.loc[games['player'], 'b']
+                player = abilities.loc[games['player'], 'team']
                 df.loc[games.index, 'a'] = np.array(a)
                 df.loc[games.index, 'b'] = np.array(b)
+                df.loc[games.index, 'pteam'] = np.array(player)
 
         df.fillna(0, inplace=True)
+
+    return df
+
+
+def player_position(season):
+    mongo = mongo_utils.MongoDB()
+
+    fields = {'seasons': '$seasons'}
+
+
+
+    pipeline = [
+        {'$project': fields},
+        {'$unwind': '$seasons'},
+        {'$match': {'seasons.season': {'$in': season}}},
+        {'$group': {'_id': {'player': '$_id', 'season': '$seasons.season'},
+                    'pos': {'$first': '$seasons.pos'}}},
+    ]
+
+    players = mongo.aggregate('player_season', pipeline)
+
+    df = pd.DataFrame(list(players))
+    df = pd.concat([df.drop(['_id'], axis=1), df['_id'].apply(pd.Series)], axis=1)
+
+    df.replace('SF-PF', 'SF', inplace=True)
+    df.replace('PF-SF', 'PF', inplace=True)
+    df.replace('SG-PG', 'SG', inplace=True)
+    df.replace('SF-SG', 'SF', inplace=True)
+    df.replace('PG-SG', 'PG', inplace=True)
+    df.replace('SG-SF', 'SG', inplace=True)
+    df.replace('PF-C', 'PF', inplace=True)
+    df.replace('C-PF', 'C', inplace=True)
 
     return df

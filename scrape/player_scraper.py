@@ -86,7 +86,8 @@ def player_per_game(player):
     # Player dictionary
     player_stats = {
         '_id': url.rsplit('/', 1)[-1].rsplit('.', 1)[0],
-        'name': player['name']
+        'name': player['name'],
+        'seasons': []
     }
 
     # These entries are defined in the per game and advanced tables
@@ -101,22 +102,19 @@ def player_per_game(player):
 
         season_year = year['id'][9:13]
 
-        # If a player is traded midway through the season, the year's totals for
-        # both teams is the first row.  Right now only the totals are stored
-        if season_year not in player_stats:
-            player_stats[season_year] = {}
+        season['season'] = int(season_year)
 
-            # Each stat in a season (Per Game)
-            for stat in year.find_all('td', {'data-stat': regex}):
-                season[stat['data-stat']] = scrape_utils.stat_parse(stat['data-stat'], stat.string)
+        # Each stat in a season (Per Game)
+        for stat in year.find_all('td', {'data-stat': regex}):
+            season[stat['data-stat']] = scrape_utils.stat_parse(stat['data-stat'], stat.string)
 
-            for key in entries:
-                if key in season:
-                    player_stats[season_year][key] = season.pop(key)
+        #for key in entries:
+        #    if key in season:
+        #        player_stats[season_year][key] = season.pop(key)
 
-            player_stats[season_year]['per_g'] = season
+        player_stats['seasons'].append(season)
 
-    mongo.insert('player_per_game', player_stats)
+    mongo.insert('player_season', player_stats)
 
 
 def player_box_score(game_id):
