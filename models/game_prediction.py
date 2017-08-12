@@ -132,102 +132,63 @@ def player_beta_prediction(season):
     return sum(correct) / len(test), roi, profit
 
 
-def best_player_prediction(season):
-    mongo = mongo_utils.MongoDB()
+def best_player_prediction(season, penalty=0.25):
+    """
+    Prediction using Dixon Coles team abilities and a penalty if a team is missing their best player
+
+    :param season: NBA Season
+    :param penalty: Best player penalty
+    :return: Accuracy, Betting stats
+    """
 
     # datasets
-    test = datasets.dc_dataframe(season=season, abilities=True, bet=True)
+    games = datasets.dc_dataframe(season=season, abilities=True, bet=True)
     players = datasets.player_dataframe(season=season, teams=True)
 
-    test['hbest'] = 1
-    test['abest'] = 1
+    # Team penalties
+    games['hpen'], games['apen'] = pu.missing_player_penalty(players, games, penalty)
 
-    for week, stats in players.groupby('week'):
+    hprob, aprob = np.zeros(len(games)), np.zeros(len(games))
 
-        bp = mongo.find_one('team_best_player', {'week': int(week)}, {'_id': 0, 'week': 0})
+    # Team Probabilities
+    for row in games.itertuples():
+        hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.hmean * row.hpen, row.amean * row.apen)
 
-        for _id, game in stats.groupby('game'):
-
-            home = np.where(game.phome, game.player, '')
-            away = np.where(game.phome, '', game.player)
-
-            index = test[test._id == _id].index[0]
-
-            home_team = game.home.unique()[0]
-            away_team = game.away.unique()[0]
-
-            if bp[home_team]['player1'] not in home:
-                test.loc[index, 'hbest'] = test.loc[index, 'hbest'] - (bp[home_team]['mean1']) / 4
-
-            if bp[away_team]['player1'] not in away:
-                test.loc[index, 'abest'] = test.loc[index, 'abest'] - (bp[away_team]['mean1']) / 4
-
-            if bp[home_team]['player2'] not in home:
-                test.loc[index, 'hbest'] = test.loc[index, 'hbest'] - (bp[home_team]['mean2']) / 4
-
-            if bp[away_team]['player2'] not in away:
-                test.loc[index, 'abest'] = test.loc[index, 'abest'] - (bp[away_team]['mean2']) / 4
-
-    hprob, aprob = np.zeros(len(test)), np.zeros(len(test))
-
-    for row in test.itertuples():
-        hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.hmean * row.hbest, row.amean * row.abest)
-
-    winners = np.where(test.hpts > test.apts, test.home, test.away)
-    prediction = np.where(hprob > aprob, test.home, test.away)
+    winners = np.where(games.hpts > games.apts, games.home, games.away)
+    prediction = np.where(hprob > aprob, games.home, games.away)
     correct = np.equal(winners, prediction)
 
-    roi, profit = pu.betting(hprob, aprob, test)
+    roi, profit = pu.betting(hprob, aprob, games)
 
-    return sum(correct) / len(test), np.array(roi), np.array(profit)
+    return sum(correct) / len(games), np.array(roi), np.array(profit)
 
 
-def star_player_prediction(season):
-    mongo = mongo_utils.MongoDB()
+def star_player_prediction(season, penalty=0.25):
+    """
+    Prediction using Dixon Coles team abilities and a penalty if a team is a missing a star player
 
-    # datasets
-    test = datasets.dc_dataframe(season=season, abilities=True, bet=True)
+    :param season: NBA season
+    :param penalty: Star player penalty
+    :return: Accuracy, Betting stats
+    """
+
+    # Datasets
+    games = datasets.dc_dataframe(season=season, abilities=True, bet=True)
     players = datasets.player_dataframe(season=season, teams=True)
 
-    test['hbest'] = 1
-    test['abest'] = 1
+    # Team Penalties
+    games['hpen'], games['apen'] = pu.star_player_penalty(players, games, penalty)
 
-    for week, stats in players.groupby('week'):
+    hprob, aprob = np.zeros(len(games)), np.zeros(len(games))
 
-        bp = mongo.find_one('best_player_position', {'week': int(week)}, {'_id': 0, 'week': 0})
+    # Team probabilities
+    for row in games.itertuples():
+        hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.hmean * row.hpen, row.amean * row.apent)
 
-        df = pd.DataFrame(bp['85'])
-
-        for _id, game in stats.groupby('game'):
-
-            homep = np.where(game.phome, game.player, '')
-            awayp = np.where(game.phome, '', game.player)
-
-            home_team = game.home.unique()[0]
-            away_team = game.away.unique()[0]
-
-            index = test[test._id == _id].index[0]
-
-            home = df[df['team'] == home_team]
-            away = df[df['team'] == away_team]
-
-            for row in home.itertuples():
-                if row.player not in homep:
-                    test.loc[index, 'hbest'] = test.loc[index, 'hbest'] - row.mean / 5
-
-            for row in away.itertuples():
-                if row.player not in awayp:
-                    test.loc[index, 'abest'] = test.loc[index, 'abest'] - row.mean / 5
-
-    hprob, aprob = np.zeros(len(test)), np.zeros(len(test))
-
-    for row in test.itertuples():
-        hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.hmean * row.hbest, row.amean * row.abest)
-
-    winners = np.where(test.hpts > test.apts, test.home, test.away)
-    prediction = np.where(hprob > aprob, test.home, test.away)
+    winners = np.where(games.hpts > games.apts, games.home, games.away)
+    prediction = np.where(hprob > aprob, games.home, games.away)
     correct = np.equal(winners, prediction)
 
-    roi, profit = pu.betting(hprob, aprob, test)
+    roi, profit = pu.betting(hprob, aprob, games)
 
-    return sum(correct) / len(test), np.array(roi), np.array(profit)
+    return sum(correct) / len(games), np.array(roi), np.array(profit)
