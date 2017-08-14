@@ -142,7 +142,7 @@ def create_test_set(t, g, margin, dr=True):
     return pd.DataFrame(data)
 
 
-def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=False):
+def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=False, xi=0.062):
     """
     Create a Pandas DataFrame for the Dixon and Coles model that uses final scores only.
     Can specify the NBA season, month and if betting information should be included.
@@ -207,7 +207,8 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=False
         weeks = df.groupby('week')
 
         for week, games in weeks:
-            abilities = mongo.find_one('dixon', {'week': int(week)})
+            abilities = mongo.find_one('dixon', {'week': int(week), 'xi': xi})
+
 
             # Home Team Advantage
             home_adv = abilities.pop('home')

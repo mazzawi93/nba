@@ -82,9 +82,9 @@ class DixonColes(Basketball):
         print("Time: %f" % (end - start))
 
         # SciPy minimization requires a numpy array for all abilities, so convert them to readable dict
-        self.abilities = convert_abilities(self.opt.x, 0, self.teams)
+        self.abilities = pu.convert_abilities(self.opt.x, 0, self.teams)
 
-    def find_time_param(self):
+    def time_log_score(self):
         """
         In the Dixon and Coles model, they determine a weighting function to make sure more recent results are more
         relevant in the model.  The function they chose is exp(-Xi * t).  A larger value of Xi will give a higher weight
@@ -97,9 +97,9 @@ class DixonColes(Basketball):
         :return: Different time values
         """
 
-        s = 0
+        dataset = datasets.dc_dataframe(self.teams, season=self.season)
 
-        dataset = datasets.dc_dataframe(self.teams, season=2017)
+        hprob, aprob = np.zeros(len(dataset)), np.zeros(len(dataset))
 
         # Determine the points of the Xi function
         for row in dataset.itertuples():
@@ -108,19 +108,11 @@ class DixonColes(Basketball):
             hmean = self.opt.x[row.home] * self.opt.x[row.away + self.nteams] * self.opt.x[self.nteams * 2]
             amean = self.opt.x[row.away] * self.opt.x[row.home + self.nteams]
 
-            # Calculate probabilities
-            prob = 0
-            for h in range(60, 140):
-                for a in range(60, 140):
+            hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(hmean, amean)
 
-                    if h > a and row.hpts > row.apts:
-                        prob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
-                    elif h < a and row.hpts < row.apts:
-                        prob += (poisson.pmf(mu=hmean, k=h) * poisson.pmf(mu=amean, k=a))
+        hw = np.where(dataset.hpts > dataset.apts, True, False)
 
-            s += np.log(prob)
-
-        return s
+        return np.sum(np.log(hprob[hw])) + np.sum(np.log(hprob[np.invert(hw)]))
 
 
 class DixonRobinson(Basketball):
@@ -155,4 +147,4 @@ class DixonRobinson(Basketball):
         print("Time: %f" % (end - start))
 
         # SciPy minimization requires a numpy array for all abilities, so convert them to readable dict
-        self.abilities = convert_abilities(self.opt.x, model, self.teams)
+        self.abilities = pu.convert_abilities(self.opt.x, model, self.teams)

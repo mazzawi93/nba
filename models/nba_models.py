@@ -66,7 +66,7 @@ def dixon_robinson(params, games, nteams, model):
     return -(home_like + away_like - total_like)
 
 
-def dynamic_dixon_coles():
+def dynamic_dixon_coles(xi=0.062):
     """
     Computes the team abilities for every week by combining the datasets and using the time value,
     starting with the 2013 season as the base values for teams.
@@ -94,7 +94,7 @@ def dynamic_dixon_coles():
     # Recalculate the Dixon Coles parameters every week after adding the previous week to the dataset
     for week, stats in weeks_df:
         # Get team parameters for the current week
-        opt = minimize(dixon_coles, x0=a0, args=(start_df, 30, week, 0.024),
+        opt = minimize(dixon_coles, x0=a0, args=(start_df, 30, week, xi),
                        constraints=con, method='SLSQP')
         abilities = pu.convert_abilities(opt.x, 0, teams)
 
@@ -102,6 +102,7 @@ def dynamic_dixon_coles():
         abilities['min_date'] = stats.date.min()
         abilities['max_date'] = stats.date.max()
         abilities['week'] = int(week)
+        abilities['xi'] = xi
         mongo.insert('dixon', abilities)
 
         # Append this week to the database
@@ -146,7 +147,7 @@ def dynamic_poisson():
             if games.pts.mean() == 0:
                 players[str(name)] = 0
             else:
-                opt = minimize(player_poisson, x0=games.pts.mean(), args=(games, week, 0.024))
+                opt = minimize(player_poisson, x0=games.pts.mean(), args=(games, week, 0.062))
 
                 if opt.x[0] < 0:
                     opt.x[0] = 0
@@ -244,49 +245,38 @@ def find_best_players():
 
 
         players = {'week': int(week)}
-        positions = {'week': int(week), '95': [], '90': [], '85': [], '80': [], '75': []}
+
+        for team, stats in df.groupby('team'):
+
+            bm = np.nan_to_num(beta.mean(stats.a, stats.b))
+            players[team] = {'player': str(stats.index[bm.argmax()]), 'mean': bm.max()}
+
+        mongo.insert('best_player_teams', players)
+
+
+def find_star_players(percentile=84):
+    # Mongo
+    mongo = mongo_utils.MongoDB()
+
+    weeks = mongo.find('player_beta')
+
+    for players in weeks:
+
+        del players['_id']
+        week = players['week']
+        del players['week']
+
+        df = pd.DataFrame.from_dict(players, 'index')
+
+        positions = {'week': int(week), str(percentile): []}
 
         for pos, stats in df.groupby('position'):
 
             bm = np.nan_to_num(beta.mean(stats.a, stats.b))
 
-
-            for num in zip(*np.where(bm > np.percentile(bm, 95))):
-                positions['95'].append(
+            for num in zip(*np.where(bm > np.percentile(bm, percentile))):
+                positions[str(percentile)].append(
                     {'player': stats.index[num], 'mean': bm[num], 'team': stats.loc[stats.index[num], 'team']})
 
-            for num in zip(*np.where(bm > np.percentile(bm, 90))):
-                positions['90'].append(
-                    {'player': stats.index[num], 'mean': bm[num], 'team': stats.loc[stats.index[num], 'team']})
-
-            for num in zip(*np.where(bm > np.percentile(bm, 85))):
-                positions['85'].append(
-                    {'player': stats.index[num], 'mean': bm[num], 'team': stats.loc[stats.index[num], 'team']})
-
-            for num in zip(*np.where(bm > np.percentile(bm, 80))):
-                positions['80'].append(
-                    {'player': stats.index[num], 'mean': bm[num], 'team': stats.loc[stats.index[num], 'team']})
-
-            for num in zip(*np.where(bm > np.percentile(bm, 75))):
-                positions['75'].append(
-                    {'player': stats.index[num], 'mean': bm[num], 'team': stats.loc[stats.index[num], 'team']})
-
-
-        for team, stats in df.groupby('team'):
-
-            bm = np.nan_to_num(beta.mean(stats.a, stats.b))
-
-            players[team] = {'player1': str(stats.index[bm.argmax()]), 'mean1': bm.max()}
-
-            bm = np.delete(bm, bm.argmax())
-
-            players[team]['player2'] = str(stats.index[bm.argmax()])
-            players[team]['mean2'] = bm.max()
-
-
-
-
-
-        mongo.insert('best_player_teams', players)
         mongo.insert('best_player_position', positions)
 

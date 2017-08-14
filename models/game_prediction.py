@@ -6,7 +6,7 @@ from models import prediction_utils as pu
 import pandas as pd
 
 
-def dixon_prediction(season, abilities=None):
+def dixon_prediction(season, abilities=None, xi=0.0):
     """
     Dixon Coles or Robinson game prediction based off the team probabilities.
 
@@ -16,7 +16,7 @@ def dixon_prediction(season, abilities=None):
     """
 
     # Testing Dataset
-    test = datasets.dc_dataframe(season=season, bet=True, abilities=True)
+    test = datasets.dc_dataframe(season=season, bet=True, abilities=True, xi=xi)
 
     # ngames = np.zeros(100)
     # ncorrect = np.zeros(100)
@@ -146,7 +146,7 @@ def best_player_prediction(season, penalty=0.25):
     players = datasets.player_dataframe(season=season, teams=True)
 
     # Team penalties
-    games['hpen'], games['apen'] = pu.missing_player_penalty(players, games, penalty)
+    games['hpen'], games['apen'] = pu.best_player_penalty(players, games, penalty)
 
     hprob, aprob = np.zeros(len(games)), np.zeros(len(games))
 
@@ -163,7 +163,7 @@ def best_player_prediction(season, penalty=0.25):
     return sum(correct) / len(games), np.array(roi), np.array(profit)
 
 
-def star_player_prediction(season, penalty=0.25):
+def star_player_prediction(season, percentile=84):
     """
     Prediction using Dixon Coles team abilities and a penalty if a team is a missing a star player
 
@@ -177,13 +177,13 @@ def star_player_prediction(season, penalty=0.25):
     players = datasets.player_dataframe(season=season, teams=True)
 
     # Team Penalties
-    games['hpen'], games['apen'] = pu.star_player_penalty(players, games, penalty)
+    games['hpen'], games['apen'] = pu.star_player_penalty(players, games, percentile)
 
     hprob, aprob = np.zeros(len(games)), np.zeros(len(games))
 
     # Team probabilities
     for row in games.itertuples():
-        hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.hmean * row.hpen, row.amean * row.apent)
+        hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.hmean * row.hpen, row.amean * row.apen)
 
     winners = np.where(games.hpts > games.apts, games.home, games.away)
     prediction = np.where(hprob > aprob, games.home, games.away)
