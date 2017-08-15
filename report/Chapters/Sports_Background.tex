@@ -1,49 +1,12 @@
-\chapter{Background}
+\chapter{Literature Review}\label{chapter:background}
 
 \textit{Give a background on basketball, sports predictions in general, sports predictions on basketball and theoretical concepts used in the report.}
 
-\section{Basketball}
-Basketball is a popular sport played by teams with 5 players on each side.  Seasons are played across two years, beginning in October and ending in April of the following year.  For the purposes of this paper, when a season is discussed for example the 2016 season, it will be in reference to the 2015-16 season.
+\section{Analytics in Sports}
 
-There are 5 players on court per team, each with their own responsibilities summarized below by position \cite{player_criteria}:
-
-\begin{itemize}
-	\item \textbf{Point Guard (PG):} They are the play maker, the ball is usually in their hands.  They organize the team's play and control the intensity of play.
-	\item \textbf{Shooting Guard (SG):} 
-	\item \textbf{Small Forward (SF):}
-	\item \textbf{Power Forward (PF):}
-	\item \textbf{Centre (C):}
-\end{itemize}
-
-Table \ref{table:position_criteria} summarizes the important criteria for each position.
-
-\begin{table}[ht]
-\centering
-\begin{tabular}{|l|c|c|c|c|c|}
-\hline
- & \textbf{PG} & \textbf{SG} & \textbf{SF} & \textbf{PF} & \textbf{C} \\ \hline
-\textbf{Defensive Pressure} & X & X &  &  &  \\ \hline
-\textbf{Transition Defense} & X & X & X &  &  \\ \hline
-\textbf{Ball Control} & X &  &  &  &  \\ \hline
-\textbf{Passing Skills} & X &  &  &  &  \\ \hline
-\textbf{Dribble Penetration} & X & X & X & X & X \\ \hline
-\textbf{Outside Shots} & X & X & X &  &  \\ \hline
-\textbf{Transition Offense} & X & X & X &  &  \\ \hline
-\textbf{Offense without the ball} &  & X & X &  &  \\ \hline
-\textbf{Free Throws} &  & X & X & X & X \\ \hline
-\textbf{Rebounding} &  &  &  & X & X \\ \hline
-\textbf{Inside Shots} &  &  &  & X & X \\ \hline
-\textbf{Screens} &  &  &  & X & X \\ \hline
-\textbf{Drawing Fouls} &  &  &  &  & X \\ \hline
-\end{tabular}
-\caption{Basketball Position Criteria}
-\label{table:position_criteria}
-\end{table}
-
-\section{Prediction in Sports}
 
 \subsection{Baseball}
-
+Baseball can be seen as the beginning for sports analytics \citep{moneyball}.  The Oakland Athletics could not compete financially with the bigger teams of Major League Baseball, thus general manager Billy Beane used 
 \subsection{American Football}
 
 \subsection{English Football}
@@ -56,29 +19,42 @@ Dixon and Robinson extended the model created by Dixon and Coles by modelling go
 
 \textit{Talk about nba advanced stats.}
 
-There is a belief among basketball players and fans that a player will be more likely to score following a previous successful shot rather than a miss.  A survey was conducted of NBA fans, where 91\% of fans believed that a player has a better chance of scoring after having just made his last two or three shots than after missing the same number \citep{nba_hot_hand}.  Shooting records from the Philadelphia 76ers and it's opponents were analysed from the 1980-81 season.   The analysis provided no evidence towards streak shooting.  Free throw data from the Boston Celtics during the 1980-81 and 1981-82 seasons were also analysed to remove the presence of shot selection and defensive pressure.  Again, no evidence was found the second free throw was affected by the first.  \citep{nba_hot_hand} also conducted an experiment with the players from Cornell University as an alternative way to eliminate shot selection and defensive pressure.  The conclusion of the Cornell experiment is that previous shots influenced the players' predictions, but not their performance.  
+% Streak Shooting
+There is a belief among basketball players and fans that a player will be more likely to score following a previous successful shot rather than a miss.  A survey was conducted of NBA fans, where 91\% of fans believed that a player has a better chance of scoring after having just made his last two or three shots than after missing the same number \citep{nba_hot_hand}.  Shooting records from the Philadelphia 76ers and it's opponents were analysed from the 1980-81 season.   The analysis provided no evidence towards streak shooting.  Free throw data from the Boston Celtics during the 1980-81 and 1981-82 seasons were also analysed to remove the presence of shot selection and defensive pressure.  Again, no evidence was found the second free throw was affected by the first.  Finally, an experiment with the players from Cornell University as an alternative way to eliminate shot selection and defensive pressure \citep{nba_hot_hand}.  The conclusion of the Cornell experiment is that previous shots 
+influenced the players' predictions, but not their performance.  
 
-Team Cohesion \cite{team_cohesion}
+% Team Cohesion
+Team cohesion is an important factor to consider as research studies have shown that highly cohesive teams are likely to be highly successful teams \citep{team_cohesion}.  Research was done to evaluate team cohesion and performance in the basketball league in Kenya \citep{basketball_team_cohesion}.  The participants were athletes who had at least two years experience in the league.  Six players were randomly selected from each team in the league.  The results show that 96\% of players believed they played and won as a team while 76\% believed they lost as a team.  An analysis of variance (ANOVA) test was conducted, which shows that teams with a higher cohesion between players won more frequently than teams with low cohesion.  There was a significant relationship shown between team size and team cohesion.  In the NBA, there is a maximum amount of players allowed per team, so this may not affect this league on the same level.  While the studies show that team cohesion leads to success, it would be difficult to translate that into a statistical model.
 
+% NBA Defense
+Most of basketball advanced metrics have been developed for offence as offensive performance is more easily measured due to the number of statistics pertaining to scoring.  Although there are statistics such as steals and blocks that provide some insight into a player's defensive performance, they do not show the full story.  Thus, there have been attempts to model defensive performance by introducing new defensive metrics utilising the the emerging forms of player tracking information \citep{nba_defense}.  The model created by Franks et. al. \citep{nba_defense} begins by estimating defensive matchups for every moment in a basketball game.  The matchups allows us to see which defenders are responsible for which attacking player at different stages of an offensive possession, including when points are scored.  Table \ref{table:defensive_metrics} shows the metrics introduced.  These metrics make it easier to see who are the best and worst defenders in the league and could greatly improve the performance of a statistical model.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Defensive Metric} & \textbf{Description} \\ \hline
+Volume Score & \begin{tabular}[c]{@{}l@{}}The total number of shot attempts a defender faces.\end{tabular}\\ \hline
+Disruption Score & \begin{tabular}[c]{@{}l@{}}A defender's ability to reduce the \\  effectiveness of his opponent's shots.\end{tabular}\\ \hline
+Defensive Shot Chart & \begin{tabular}[c]{@{}l@{}}Similar to an offensive shot chart, but\\ for defensive shots against.\end{tabular}\\ \hline
+Shots Against & \begin{tabular}[c]{@{}l@{}}Weighted average of shots attempted\\ against the defender per 100 possessions.\end{tabular}\\ \hline
+Counterpoints & \begin{tabular}[c]{@{}l@{}}Weighted average of points scored\\ against the defender per 100 possessions.\end{tabular}\\ \hline
+
+\end{tabular}
+\caption{Defensive Player Metrics}
+\label{table:defensive_metrics}
+\end{table}
+
+% Shot Selection
+Shot selection is a very important part of offence in basketball.  \ldots can capture the correlation between a player's skill and shooting habits.
 Shot selection \cite{nba_spatial_analysis}.
 
+% NBA Taxonomy
+Again, player tracking data was analysed to dissect basketball plays using acceleration \citep{nba_taxonomy}.  Further research in this subject could lead to classifying team philosophies and using that information when predicting opposing play styles (For example a high tempo offence against a very lax defence)
 
-\subsection{Basketball Game Outcome Prediction}
-
-Various machine learning techniques have been researched to predict the outcomes of a basketball game.
-
+% Fuzzy Classification
 A fuzzy classification system has been developed to predict the winner of a game from the Asociaci\'on de Clubes de Baloncesto, the professional basketball league in Spain \citep{nba_fuzzy_prediction}.  Eight different feature selection algorithms were used and the most consistent features selected were the average number of assists by the first team, the teams' evaluations and the average points scored by each team.  Eleven different fuzzy algorithms were used, with accuracies ranging from 63.5\% to 71.5\%.
 
-
-\subsection{Basketball Player Prediction}
-There have also been attempts at modelling and analysing player performance in different aspects of the sport such as defence, shot analysis \citep{nba_spatial_analysis}, play classification \citep{nba_taxonomy} and `streak shooting` \citep{nba_hot_hand}.  This section will analyse the research that has been done on basketball player analysis.
-
-\textit{Player Effciency Rating}
-
-
-Most of basketball advanced metrics have been developed for offence, there have been attempts to model advance defensive metrics \citep{nba_defense}.  Offensive performance is more easily measured due to the number of statistics pertaining scoring.  Although there are stats such as steals, blocks that provide some insight into a player's defensive performance, they do not show the full story.  There has been incredible progress in NBA analytics, where player tracking has hit new levels?.
-
-Just as previously discussed, fuzzy systems have been created to predict the performance of a player \cite{nba_fuzzy_prediction_player}.  Positions are broken down so that different stats have higher importance in evaluating performance.
 \section{Mathematical Concepts}
 The following section will describe the mathematical concepts used in the modelling done in this report.
 
