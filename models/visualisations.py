@@ -2,6 +2,7 @@ from db import mongo_utils, process_utils
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.stats import poisson, beta
 
 
 def point_times_chart(season):
@@ -69,3 +70,16 @@ def point_times_chart(season):
     plt.show()
 
     return totals
+
+
+def poisson_distribution(mu, cdot, cline):
+
+    x = np.arange(0, 21)
+    y = poisson.pmf(mu=mu, k=x)
+
+    plt.plot(x, y, cline + '-', linewidth=0.5)
+    plt.plot(x, y, cdot + 'o', label=r'$\lambda = $' + str(mu))
+    plt.xticks(np.arange(0,21,5))
+    plt.xlabel('k')
+    plt.ylabel('Pr(X=k)')
+    plt.legend()
