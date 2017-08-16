@@ -142,7 +142,7 @@ def create_test_set(t, g, margin, dr=True):
     return pd.DataFrame(data)
 
 
-def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=False, xi=0.062):
+def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=None, mw=0.062):
     """
     Create a Pandas DataFrame for the Dixon and Coles model that uses final scores only.
     Can specify the NBA season, month and if betting information should be included.
@@ -163,6 +163,7 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=False
         'hpts': '$home.pts',
         'apts': '$away.pts',
         'week': {'$add': [{'$week': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2010]}, 52]}]},
+        'day':  {'$add': [{'$dayOfYear': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2010]}, 365]}]},
         'date': 1,
     }
 
@@ -204,19 +205,19 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=False
         hmean = np.array([])
         amean = np.array([])
 
-        weeks = df.groupby('week')
+        split = df.groupby(abilities)
 
-        for week, games in weeks:
-            abilities = mongo.find_one('dixon', {'week': int(week), 'xi': xi})
+        for time, games in split:
 
+            ab = mongo.find_one(abilities + '_dixon', {str(abilities): int(time), 'mw': mw})
 
             # Home Team Advantage
-            home_adv = abilities.pop('home')
+            home_adv = ab.pop('home')
 
-            abilities = pd.DataFrame.from_dict(abilities)
+            ab = pd.DataFrame.from_dict(ab)
 
-            home = np.array(abilities[games.home])
-            away = np.array(abilities[games.away])
+            home = np.array(ab[games.home])
+            away = np.array(ab[games.away])
 
             hmean = np.append(hmean, home[0] * away[1] * home_adv)
             amean = np.append(amean, home[1] * away[0])

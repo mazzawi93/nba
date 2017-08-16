@@ -44,5 +44,9 @@ class MongoDB:
 
         return self.db[collection].aggregate(pipeline, allowDiskUse=True)
 
+    def remove(self, collection, query=None):
+
+        return self.db[collection].remove(query)
+
     def __del__(self):
         self.client.close()

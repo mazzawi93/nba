@@ -163,4 +163,4 @@ def player_box_score(game_id):
         home = True
 
     # Insert into database
-    mongo.update('game_log', {'_id': game_id}, {'$set': {'players': box_score}})
+    mongo.update('player_game_log', {'_id': game_id}, {'$set': {'players': box_score}})

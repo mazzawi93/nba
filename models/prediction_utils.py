@@ -152,6 +152,61 @@ def convert_abilities(opt, model, teams):
     return abilities
 
 
+def find_best_players():
+    """
+    Find each teams best player going into a game
+    """
+
+    # Mongo
+    mongo = mongo_utils.MongoDB()
+
+    weeks = mongo.find('player_beta')
+
+    for players in weeks:
+
+        del players['_id']
+        week = players['week']
+        del players['week']
+
+        df = pd.DataFrame.from_dict(players, 'index')
+
+        players = {'week': int(week)}
+
+        for team, stats in df.groupby('team'):
+            bm = np.nan_to_num(beta.mean(stats.a, stats.b))
+            players[team] = {'player': str(stats.index[bm.argmax()]), 'mean': bm.max()}
+
+        mongo.insert('best_player_teams', players)
+
+def find_star_players(percentile=84):
+    # Mongo
+    mongo = mongo_utils.MongoDB()
+
+    weeks = mongo.find('player_beta')
+
+    for players in weeks:
+
+        del players['_id']
+        week = players['week']
+        del players['week']
+
+        df = pd.DataFrame.from_dict(players, 'index')
+
+        positions = {'week': int(week), str(percentile): []}
+
+        for pos, stats in df.groupby('position'):
+
+            bm = np.nan_to_num(beta.mean(stats.a, stats.b))
+
+            for num in zip(*np.where(bm > np.percentile(bm, percentile))):
+                positions[str(percentile)].append(
+                    {'player': stats.index[num], 'mean': bm[num], 'team': stats.loc[stats.index[num], 'team']})
+
+        mongo.insert('best_player_position', positions)
+
+
+
+
 def best_player_penalty(players, games, pen_factor):
     """
     Determine team penalties if they are missing their best player
@@ -246,7 +301,7 @@ def star_player_penalty(players, games, star_factor):
 
 
 def time_score(xi):
-    games = datasets.dc_dataframe(season=[2015, 2016, 2017], abilities=True, xi=xi)
+    games = datasets.dc_dataframe(season=[2015, 2016, 2017], abilities=True, mw=xi)
 
     hprob, aprob = np.zeros(len(games)), np.zeros(len(games))
 
