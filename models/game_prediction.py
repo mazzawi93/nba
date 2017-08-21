@@ -6,7 +6,7 @@ from models import prediction_utils as pu
 import pandas as pd
 
 
-def dixon_prediction(season, abilities=None, mw=0, player_pen=None):
+def dixon_prediction(season, abilities=None, mw=0, players=True, star=False):
     """
     Dixon Coles or Robinson game prediction based off the team probabilities.
 
@@ -15,13 +15,13 @@ def dixon_prediction(season, abilities=None, mw=0, player_pen=None):
     :return: Accuracy, betting return on investment
     """
 
-    games = datasets.dc_dataframe(season=season, abilities=True, mw=mw, players=player_pen is not None)
+    games = datasets.dc_dataframe(season=season, abilities=True, mw=mw, players=players)
 
     hprob = np.zeros(len(games))
     aprob = np.zeros(len(games))
 
-    if player_pen is not None:
-        games['hpen'], games['apen'] = pu.player_penalty(games, mw, 0.17, player_pen)
+    if players:
+        games['hpen'], games['apen'] = pu.player_penalty(games, mw, 0.17, star)
     else:
         games['hpen'], games['apen'] = 1, 1
 

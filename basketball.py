@@ -273,6 +273,6 @@ class Players(DynamicDixonColes):
 
             start_df = start_df.append(stats, ignore_index=True)
 
-    def game_predictions(self, player_pen=0):
+    def game_predictions(self, star=False):
 
-        self.predictions = game_prediction.dixon_prediction([2015, 2016, 2017], mw=self.mw, player_pen=player_pen)
+        self.predictions = game_prediction.dixon_prediction([2015, 2016, 2017], mw=self.mw, players=True, star=False)

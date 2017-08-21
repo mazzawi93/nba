@@ -112,3 +112,4 @@ def beta_distribution(a, b, color, dist='pdf'):
     plt.plot(x, y, color + '-', label=r'$\alpha = $' + str(a) + '  ' + r'$\beta = $' + str(b))
     plt.ylabel(ylabel)
     plt.legend()
+
