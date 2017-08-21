@@ -142,7 +142,7 @@ def create_test_set(t, g, margin, dr=True):
     return pd.DataFrame(data)
 
 
-def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=None, mw=0.062):
+def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=False, mw=0.0394, players=False):
     """
     Create a Pandas DataFrame for the Dixon and Coles model that uses final scores only.
     Can specify the NBA season, month and if betting information should be included.
@@ -163,7 +163,6 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=None,
         'hpts': '$home.pts',
         'apts': '$away.pts',
         'week': {'$add': [{'$week': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2010]}, 52]}]},
-        'day':  {'$add': [{'$dayOfYear': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2010]}, 365]}]},
         'date': 1,
     }
 
@@ -175,6 +174,10 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=None,
     if bet:
         fields['hbet'] = '$bet.home'
         fields['abet'] = '$bet.away'
+
+    if players:
+        fields['hplayers'] = '$hplayers.player'
+        fields['aplayers'] = '$aplayers.player'
 
     pipeline = [
         {'$project': fields},
@@ -205,11 +208,9 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=None,
         hmean = np.array([])
         amean = np.array([])
 
-        split = df.groupby(abilities)
+        for week, games in df.groupby('week'):
 
-        for time, games in split:
-
-            ab = mongo.find_one(abilities + '_dixon', {str(abilities): int(time), 'mw': mw})
+            ab = mongo.find_one('dixon_team', {'week': int(week), 'mw': mw})
 
             # Home Team Advantage
             home_adv = ab.pop('home')
@@ -224,8 +225,6 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=None,
 
         df['hmean'] = hmean
         df['amean'] = amean
-
-    del df['season']
 
     return df
 
@@ -291,16 +290,13 @@ def dr_dataframe(model=1, teams=None, season=None, month=None, bet=False):
     return df
 
 
-def player_dataframe(season=None, teams=False, poisson=False, beta=False, team_ability=False, position=False):
+def player_dataframe(season=None, teams=False, position=False, team_ability=False):
     """
     Create a Pandas DataFrame for player game logs
 
     :param team_ability: Include team dixon coles abilities
-    :param beta: Include player beta values
-    :param poisson: Include player poisson mean
     :param teams: Include team parameters in the dataset
     :param season: NBA Season
-    :param nba_team: NBA team
 
     :return: DataFrame
     """
@@ -351,40 +347,6 @@ def player_dataframe(season=None, teams=False, poisson=False, beta=False, team_a
 
         pos_df = player_position(season)
         df = df.merge(pos_df, left_on=['player', 'season'], right_on=['player', 'season'])
-
-    # Player abilities
-    if poisson or beta:
-
-        weeks = df.groupby('week')
-
-        if poisson:
-            df['mean'] = 0
-
-        if beta:
-            df['a'] = 0
-            df['b'] = 0
-            df['pteam'] = ''
-
-        for week, games in weeks:
-
-            if poisson:
-                abilities = mongo.find_one('player_poisson', {'week': int(week)})
-                abilities = pd.DataFrame.from_dict(abilities, 'index')
-
-                mean = abilities.loc[games['player']][0]
-                df.loc[games.index, 'mean'] = np.array(mean)
-
-            if beta:
-                abilities = mongo.find_one('player_beta', {'week': int(week)}, {'_id': 0, 'week': 0})
-                abilities = pd.DataFrame.from_dict(abilities, 'index')
-                a = abilities.loc[games['player'], 'a']
-                b = abilities.loc[games['player'], 'b']
-                player = abilities.loc[games['player'], 'team']
-                df.loc[games.index, 'a'] = np.array(a)
-                df.loc[games.index, 'b'] = np.array(b)
-                df.loc[games.index, 'pteam'] = np.array(player)
-
-        df.fillna(0, inplace=True)
 
     return df
 

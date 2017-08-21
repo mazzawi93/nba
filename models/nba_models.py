@@ -7,7 +7,7 @@ from db import mongo_utils, process_utils, datasets
 import pandas as pd
 
 
-def dixon_coles(params, games, nteams, week, time, timespan):
+def dixon_coles(params, games, nteams, week, time):
     """
     This is the likelihood function for the Dixon Coles model adapted for basketball.
 
@@ -24,7 +24,7 @@ def dixon_coles(params, games, nteams, week, time, timespan):
     amean = params[games['away']] * params[games['home'] + nteams]
 
     likelihood = poisson.logpmf(games['hpts'], hmean) + poisson.logpmf(games['apts'], amean)
-    weight = np.exp(-time * (week - games[timespan]))
+    weight = np.exp(-time * (week - games['week']))
 
     return -np.dot(likelihood, weight)
 

@@ -134,7 +134,8 @@ def player_box_score(game_id):
     # The ids of the tables have team names in them
     table_id = re.compile('^box_[a-z]{3}_basic$')
 
-    box_score = []
+    home_players = []
+    away_players = []
 
     home = False
 
@@ -150,7 +151,6 @@ def player_box_score(game_id):
             player_id = player_id['data-append-csv']
 
             player_stats['player'] = player_id
-            player_stats['home'] = home
 
             # Loop through each stat
             for stat in player.find_all('td'):
@@ -158,9 +158,13 @@ def player_box_score(game_id):
 
             # If this key exists it means the player did not play
             if 'reason' not in player_stats:
-                box_score.append(player_stats)
+
+                if home:
+                    home_players.append(player_stats)
+                else:
+                    away_players.append(player_stats)
 
         home = True
 
     # Insert into database
-    mongo.update('player_game_log', {'_id': game_id}, {'$set': {'players': box_score}})
+    mongo.update('game_log', {'_id': game_id}, {'$set': {'hplayers': home_players, 'aplayers': away_players}})

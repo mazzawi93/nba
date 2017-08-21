@@ -1,3 +1,4 @@
+from scipy.stats import beta
 import numpy as np
 from scipy.stats import poisson
 from db import mongo_utils
@@ -152,67 +153,12 @@ def convert_abilities(opt, model, teams):
     return abilities
 
 
-def find_best_players():
-    """
-    Find each teams best player going into a game
-    """
-
-    # Mongo
-    mongo = mongo_utils.MongoDB()
-
-    weeks = mongo.find('player_beta')
-
-    for players in weeks:
-
-        del players['_id']
-        week = players['week']
-        del players['week']
-
-        df = pd.DataFrame.from_dict(players, 'index')
-
-        players = {'week': int(week)}
-
-        for team, stats in df.groupby('team'):
-            bm = np.nan_to_num(beta.mean(stats.a, stats.b))
-            players[team] = {'player': str(stats.index[bm.argmax()]), 'mean': bm.max()}
-
-        mongo.insert('best_player_teams', players)
-
-def find_star_players(percentile=84):
-    # Mongo
-    mongo = mongo_utils.MongoDB()
-
-    weeks = mongo.find('player_beta')
-
-    for players in weeks:
-
-        del players['_id']
-        week = players['week']
-        del players['week']
-
-        df = pd.DataFrame.from_dict(players, 'index')
-
-        positions = {'week': int(week), str(percentile): []}
-
-        for pos, stats in df.groupby('position'):
-
-            bm = np.nan_to_num(beta.mean(stats.a, stats.b))
-
-            for num in zip(*np.where(bm > np.percentile(bm, percentile))):
-                positions[str(percentile)].append(
-                    {'player': stats.index[num], 'mean': bm[num], 'team': stats.loc[stats.index[num], 'team']})
-
-        mongo.insert('best_player_position', positions)
-
-
-
-
-def best_player_penalty(players, games, pen_factor):
+def player_penalty(games, mw, pen_factor, star=False):
     """
     Determine team penalties if they are missing their best player
 
-    :param players: NBA Players
     :param games: NBA Games
+    :param mw: Match weighting
     :param pen_factor: Multiply the beta mean by this factor
     :return: Team penalties
     """
@@ -225,133 +171,50 @@ def best_player_penalty(players, games, pen_factor):
     apenalty = np.full(len(games), 1, dtype=float)
 
     # Each week will have different best players as they are determined by recent games
-    for week, stats in players.groupby('week'):
+    for week, stats in games.groupby('week'):
 
         # Best Players
-        bp = mongo.find_one('best_player_teams', {'week': int(week)}, {'_id': 0, 'week': 0})
+        bp = mongo.find_one('player_beta', {'week': int(week), 'mw': mw}, {'_id': 0, 'week': 0, 'mw': 0})
+        bp = pd.DataFrame.from_dict(bp, 'index')
+        bp.dropna(inplace=True)
+        bp['beta'] = np.nan_to_num(beta.mean(bp.a, bp.b))
 
-        # Set the penalties for each game
-        for _id, game in stats.groupby('game'):
+        for row in stats.itertuples():
 
-            home = np.where(game.phome, game.player, '')
-            away = np.where(game.phome, '', game.player)
+            try:
 
-            index = games[games._id == _id].index[0]
+                home = bp[bp.team == row.home]
 
-            home_team = game.home.unique()[0]
-            away_team = game.away.unique()[0]
+                if star:
+                    home_star = home[home.beta >= np.percentile(bp.beta, 85)]
 
-            if bp[home_team]['player'] not in home:
-                hpenalty[index] = hpenalty[index] - (bp[home_team]['mean']) * pen_factor
+                    for p in home_star.index:
+                        if p not in row.hplayers:
+                            hpenalty[row.Index] = hpenalty[row.Index] - home.loc[p].beta * pen_factor
+                else:
+                    home_best = home.beta.argmax()
 
-            if bp[away_team]['player'] not in away:
-                apenalty[index] = apenalty[index] - (bp[away_team]['mean']) * pen_factor
+                    if home_best not in row.hplayers:
+                        hpenalty[row.Index] = hpenalty[row.Index] - home.loc[home_best].beta * pen_factor
 
-    return hpenalty, apenalty
+            except ValueError:
+                pass
 
+            try:
+                away = bp[bp.team == row.away]
 
-def star_player_penalty(players, games, star_factor):
-    """
-    Determine team penalties if missing a 'star' player
+                if star:
+                    away_star = away[away.beta >= np.percentile(bp.beta, 85)]
 
-    :param players: NBA Players
-    :param games: NBA Games
-    :return: Team penalties
-    """
+                    for p in away_star.index:
+                        if p not in row.aplayers:
+                            apenalty[row.Index] = apenalty[row.Index] - away.loc[p].beta * pen_factor
+                else:
+                    away_best = away.beta.argmax()
 
-    # MongoDB
-    mongo = mongo_utils.MongoDB()
-
-    # Penalties are multiplied with dixon coles abilities, so no penalty is equal to one
-    hpenalty = np.full(len(games), 1, dtype=float)
-    apenalty = np.full(len(games), 1, dtype=float)
-
-    # Each week will have different star players as they are determined by recent games
-    for week, stats in players.groupby('week'):
-
-        # Star Players
-        bp = mongo.find_one('best_player_position', {'week': int(week)}, {'_id': 0, 'week': 0})
-
-        # Get the 85th percentile
-        df = pd.DataFrame(bp[str(star_factor)])
-
-        # Set penalties for each game
-        for _id, game in stats.groupby('game'):
-
-            homep = np.where(game.phome, game.player, '')
-            awayp = np.where(game.phome, '', game.player)
-
-            home_team = game.home.unique()[0]
-            away_team = game.away.unique()[0]
-
-            index = games[games._id == _id].index[0]
-
-            home = df[df['team'] == home_team]
-            away = df[df['team'] == away_team]
-
-            for row in home.itertuples():
-                if row.player not in homep:
-                    hpenalty[index] = hpenalty[index] - row.mean * 0.17
-
-            for row in away.itertuples():
-                if row.player not in awayp:
-                    apenalty[index] = apenalty[index] - row.mean * 0.17
+                    if away_best not in row.aplayers:
+                        apenalty[row.Index] = apenalty[row.Index] - away.loc[away_best].beta * pen_factor
+            except ValueError:
+                pass
 
     return hpenalty, apenalty
-
-
-def time_score(xi):
-    games = datasets.dc_dataframe(season=[2015, 2016, 2017], abilities=True, mw=xi)
-
-    hprob, aprob = np.zeros(len(games)), np.zeros(len(games))
-
-    for row in games.itertuples():
-        hprob[row.Index], aprob[row.Index] = determine_probabilities(row.hmean, row.amean)
-
-    hw = np.where(games.hpts > games.apts, True, False)
-
-    return np.sum(np.log(hprob[hw])) + np.sum(np.log(hprob[np.invert(hw)]))
-
-
-def player_penalty_score(penalty):
-    """
-    Determine the log score of a penalty factor
-
-    :param pen_factor: Penalty
-    :return: Log Score
-    """
-    games = datasets.dc_dataframe(season=[2015, 2016, 2017], abilities=True)
-    players = datasets.player_dataframe(season=[2015, 2016, 2017], teams=True)
-
-    games['hpen'], games['apen'] = best_player_penalty(players, games, pen_factor)
-
-    hprob, aprob = np.zeros(len(games)), np.zeros(len(games))
-
-    for row in games.itertuples():
-        hprob[row.Index], aprob[row.Index] = determine_probabilities(row.hmean * row.hpen, row.amean * row.apen)
-
-    hw = np.where(games.hpts > games.apts, True, False)
-
-    return np.sum(np.log(hprob[hw])) + np.sum(np.log(hprob[np.invert(hw)]))
-
-
-def star_penalty_score(percentile):
-    """
-    Determine the log score of a penalty factor
-
-    :param pen_factor: Penalty
-    :return: Log Score
-    """
-    games = datasets.dc_dataframe(season=[2015, 2016, 2017], abilities=True)
-    players = datasets.player_dataframe(season=[2015, 2016, 2017], teams=True)
-
-    games['hpen'], games['apen'] = star_player_penalty(players, games, percentile)
-
-    hprob, aprob = np.zeros(len(games)), np.zeros(len(games))
-
-    for row in games.itertuples():
-        hprob[row.Index], aprob[row.Index] = determine_probabilities(row.hmean * row.hpen, row.amean * row.apen)
-
-    hw = np.where(games.hpts > games.apts, True, False)
-
-    return np.sum(np.log(hprob[hw])) + np.sum(np.log(hprob[np.invert(hw)]))
