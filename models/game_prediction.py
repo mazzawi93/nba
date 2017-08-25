@@ -7,7 +7,7 @@ from models import prediction_utils as pu
 import pandas as pd
 
 
-def dixon_prediction(season, abilities=None, mw=0, players=True, star=False, bernoulli=False):
+def dixon_prediction(season, abilities=None, mw=0, players=False, star=False, bernoulli=False):
     """
     Dixon Coles or Robinson game prediction based off the team probabilities.
 

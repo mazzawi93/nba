@@ -314,7 +314,8 @@ def player_dataframe(season=None, teams=False, position=False, team_ability=Fals
 
     process_utils.season_check(season, fields, match)
 
-    player_stats = {'date': 1, 'phome': '$player.home', 'week': 1, 'pts': '$player.pts', 'season': 1}
+    player_stats = {'date': 1, 'phome': '$player.home', 'week': 1, 'pts': '$player.pts', 'season': 1,
+                    'fouls': '$player.fouls'}
 
     pipeline = [
         {'$project': fields},

@@ -8,7 +8,7 @@ from db import datasets, mongo_utils, process_utils
 from models import nba_models as nba
 from models import game_prediction
 from models import prediction_utils as pu
-
+from scipy.stats import beta
 
 class Basketball:
     """
@@ -276,3 +276,14 @@ class Players(DynamicDixonColes):
     def game_predictions(self, star=False):
 
         self.predictions = game_prediction.dixon_prediction([2016], mw=self.mw, players=True, star=False, bernoulli=True)
+
+    def player_progression(self, player):
+
+        weeks = self.mongo.find('player_beta', {'mw': self.mw}, {player: 1, '_id': 0})
+        means = []
+
+        for week in weeks:
+
+            means.append(beta.mean(week[player]['a'], week[player]['b']))
+
+        return np.array(means)
