@@ -275,4 +275,4 @@ class Players(DynamicDixonColes):
 
     def game_predictions(self, star=False):
 
-        self.predictions = game_prediction.dixon_prediction([2015, 2016, 2017], mw=self.mw, players=True, star=False)
+        self.predictions = game_prediction.dixon_prediction([2016], mw=self.mw, players=True, star=False, bernoulli=True)

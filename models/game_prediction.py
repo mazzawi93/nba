@@ -1,12 +1,13 @@
 import numpy as np
 from scipy.stats import beta
+from scipy.stats import bernoulli
 
 from db import datasets, mongo_utils
 from models import prediction_utils as pu
 import pandas as pd
 
 
-def dixon_prediction(season, abilities=None, mw=0, players=True, star=False):
+def dixon_prediction(season, abilities=None, mw=0, players=True, star=False, bernoulli=False):
     """
     Dixon Coles or Robinson game prediction based off the team probabilities.
 
@@ -37,9 +38,22 @@ def dixon_prediction(season, abilities=None, mw=0, players=True, star=False):
 
         hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(hmean * row.hpen, amean * row.apen)
 
-    # Actual winners and predictions
+    # Scale odds so they add to 1
+    scale = 1 / (hprob + aprob)
+    hprob = hprob * scale
+    aprob = aprob * scale
+
+    # Actual match winners
     winners = np.where(games.hpts > games.apts, games.home, games.away)
-    predictions = np.where(hprob > aprob, games.home, games.away)
+
+
+    if bernoulli:
+        home_win = np.random.binomial(1000, hprob)
+        print(home_win)
+        predictions = np.where(home_win >= 500, games.home, games.away)
+    else:
+        predictions = np.where(hprob > aprob, games.home, games.away)
+
     outcomes = pd.DataFrame({'winner': winners, 'prediction': predictions, 'month': games.date.dt.month,
                              'prob': np.maximum(hprob, aprob), 'correct': np.equal(winners, predictions),
                              'season': games.season})

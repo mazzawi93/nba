@@ -247,7 +247,9 @@ def betting_lines(year):
         team = game.find('a')
 
         # TODO: Get the point spreads
-        url = team['href']
+        url = team['href'] + '%ou'
+
+        print(url)
 
         # Team indexes in 3-letter code list
         team = team.text.split('-')
@@ -266,7 +268,9 @@ def betting_lines(year):
             i += 1
 
         # Add the betting line to the database
+
         query = {'home.team': scrape_utils.rename_team(teams[hi]), 'away.team': scrape_utils.rename_team(teams[ai]),
                  'date': date}
+        print(query)
         update = {'$set': {'bet.home': home, 'bet.away': away}}
         mongo.update('game_log', query, update)
