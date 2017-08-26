@@ -32,41 +32,6 @@ def season_check(season, fields, match):
             match['season'] = {'$in': season}
 
 
-def month_check(month, fields, match):
-    """
-    Add month to the mongoDB query fields
-    :param month: Calendar Month
-    :param fields: MongoDB Project fields
-    :param match: MongoDB Match fields
-    """
-
-    if month is not None:
-        if isinstance(month, int):
-            month = [month]
-
-        if not isinstance(month, list):
-            raise TypeError("Incorrect type entered for month (int or list)")
-
-        fields['month'] = {'$month': '$date'}
-        match['month'] = {'$in': month}
-
-
-def team_check(team):
-    """
-    Helper function to determine if teams were entered correctly
-    :param team: List of NBA Teams
-    :return: List of Teams
-    """
-
-    if not isinstance(team, list):
-        if team is not None:
-            raise TypeError("Team must be a list for query purposes")
-    else:
-        for city in team:
-            if city not in teams:
-                raise ValueError("Team not in database")
-
-
 def name_teams(test, nteams=None):
     """
     Team names for the datasets.

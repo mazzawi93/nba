@@ -10,6 +10,7 @@ from models import game_prediction
 from models import prediction_utils as pu
 from scipy.stats import beta
 
+
 class Basketball:
     """
     Basketball class used to manipulate team abilities and simulate upcoming seasons
@@ -73,35 +74,6 @@ class DixonColes(Basketball):
 
         # SciPy minimization requires a numpy array for all abilities, so convert them to readable dict
         self.abilities = pu.convert_abilities(self.opt.x, 0, self.teams)
-
-
-class DixonRobinson(Basketball):
-    """
-    Subclass for the Dixon and Robinson model which uses the time each point was scored rather than only full time
-    scores.
-    """
-
-    def __init__(self, season, model=1):
-        """
-        Initialize DixonRobinson instance.
-
-        :param model: Dixon and Robinson model (1 to 4)
-        :param season: NBA Season(s)
-        """
-
-        super().__init__()
-
-        self.dataset = datasets.dr_dataframe(model, self.teams, season)
-
-        # Initial Guess for the minimization
-        a0 = pu.initial_guess(model, self.nteams)
-
-        # Minimize the likelihood function
-        self.opt = minimize(nba.dixon_robinson, x0=a0, args=(self.dataset, self.nteams, model),
-                            constraints=self.con)
-
-        # SciPy minimization requires a numpy array for all abilities, so convert them to readable dict
-        self.abilities = pu.convert_abilities(self.opt.x, model, self.teams)
 
 
 class DynamicDixonColes(Basketball):
@@ -190,7 +162,6 @@ class DynamicDixonColes(Basketball):
 
         return np.array(attack), np.array(defence)
 
-
     def prediction_percentages(self):
 
         if self.predictions is None:
@@ -202,8 +173,8 @@ class DynamicDixonColes(Basketball):
         for season, games in self.predictions.groupby('season'):
             over = games[games.prob >= .5]
 
-            percentange.append(sum(games.correct)/len(games))
-            over50.append(sum(over.correct)/len(over))
+            percentange.append(sum(games.correct) / len(games))
+            over50.append(sum(over.correct) / len(over))
 
         return percentange, over50
 
@@ -220,7 +191,6 @@ class Players(DynamicDixonColes):
         if self.mongo.count('player_beta', {'mw': self.mw}) == 0:
             print('Player distributions don\'t exist, generating them now...')
             self.player_weekly_abilities()
-
 
     def player_weekly_abilities(self):
         """
@@ -275,7 +245,8 @@ class Players(DynamicDixonColes):
 
     def game_predictions(self, star=False):
 
-        self.predictions = game_prediction.dixon_prediction([2016], mw=self.mw, players=True, star=False, bernoulli=True)
+        self.predictions = game_prediction.dixon_prediction([2016], mw=self.mw, players=True, star=False,
+                                                            bernoulli=True)
 
     def player_progression(self, player):
 
@@ -283,7 +254,6 @@ class Players(DynamicDixonColes):
         means = []
 
         for week in weeks:
-
             means.append(beta.mean(week[player]['a'], week[player]['b']))
 
         return np.array(means)

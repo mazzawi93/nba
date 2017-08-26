@@ -8,10 +8,9 @@ from pymongo import MongoClient
 from db import process_utils, mongo_utils
 
 
-def select_match(win_margin, ids, dr):
+def select_match(win_margin, ids):
     """
     Select a match from game logs with a given winning margin
-    :param dr: True for DixonRobinson model, False for dc
     :param ids: List of game ids to exclude
     :param win_margin: Win margin of the game, negative means the away team won.
     :return: The game selected from MongoDB
@@ -32,35 +31,20 @@ def select_match(win_margin, ids, dr):
         'difference': {margin: win_margin},
         '_id': {'$nin': ids}}
 
-    if dr:
-        # TODO: Add point times
-        pipeline = [
-            {'$project': {
+    pipeline = [
+        {'$project':
+            {
                 'hpts': '$home.pts',
                 'apts': '$away.pts',
+                'week': {'$add': [{'$week': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2010]}, 52]}]},
                 'hbet': '$bet.home',
                 'abet': '$bet.away',
                 'difference': {'$subtract': ['$home.pts', '$away.pts']}
 
             }},
-            {'$match': match},
-            {'$limit': 1}
-        ]
-    else:
-        pipeline = [
-            {'$project':
-                {
-                    'hpts': '$home.pts',
-                    'apts': '$away.pts',
-                    'week': {'$add': [{'$week': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2010]}, 52]}]},
-                    'hbet': '$bet.home',
-                    'abet': '$bet.away',
-                    'difference': {'$subtract': ['$home.pts', '$away.pts']}
-
-                }},
-            {'$match': match},
-            {'$limit': 1}
-        ]
+        {'$match': match},
+        {'$limit': 1}
+    ]
 
     game = collection.aggregate(pipeline)
 
@@ -142,14 +126,13 @@ def create_test_set(t, g, margin, dr=True):
     return pd.DataFrame(data)
 
 
-def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=False, mw=0.0394, players=False):
+def dc_dataframe(teams=None, season=None, bet=False, abilities=False, mw=0.0394, players=False):
     """
     Create a Pandas DataFrame for the Dixon and Coles model that uses final scores only.
     Can specify the NBA season, month and if betting information should be included.
 
     :param teams: Team names
     :param season: NBA Season
-    :param month: Calendar Month
     :param bet: Betting Lines
     :return: Pandas DataFrame
     """
@@ -169,7 +152,6 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=False
     match = {}
 
     process_utils.season_check(season, fields, match)
-    process_utils.month_check(month, fields, match)
 
     if bet:
         fields['hbet'] = '$bet.home'
@@ -225,67 +207,6 @@ def dc_dataframe(teams=None, season=None, month=None, bet=False, abilities=False
 
         df['hmean'] = hmean
         df['amean'] = amean
-
-    return df
-
-
-def dr_dataframe(model=1, teams=None, season=None, month=None, bet=False):
-    """
-    Create and return a pandas dataframe for matches that includes the home and away team, and
-    times for points scored.
-
-    Reworking it to include extended Dixon Robinson model statistics
-
-    :param month: Calendar Month
-    :param season: NBA Season (All stored season selected if None)
-    :return: Pandas Dataframe
-    """
-
-    # MongoDB
-    mongo = mongo_utils.MongoDB()
-
-    df = dc_dataframe(teams, season, month, bet)
-
-    # Don't need week for Dixon Robinson
-    del df['week']
-
-    if model > 1:
-        for team in ['home', 'away']:
-
-            # Fields we need from mongoDB no matter what the search fields are
-            fields = {
-                'date': 1,
-                'pbp': '$pbp.' + team
-            }
-
-            match = {}
-
-            # Prepare season value
-            process_utils.season_check(season, fields, match)
-            process_utils.month_check(month, fields, match)
-
-            group = {'_id': '$_id'}
-
-            for i in range(1, 5):
-                group[team + str(i)] = {'$sum':
-                                            {'$cond':
-                                                 [{'$and':
-                                                       [{'$gte': ['$pbp.time', 12 * i - 1]},
-                                                        {'$lt': ['$pbp.time', 12 * i]}]
-                                                   }, '$pbp.points', 0]}}
-
-            pipeline = [
-                {'$project': fields},
-                {'$match': match},
-                {'$sort': {'date': 1}},
-                {'$unwind': '$pbp'},
-                {'$group': group}
-            ]
-
-            games = mongo.aggregate('game_log', pipeline)
-            games = pd.DataFrame(list(games))
-
-            df = df.merge(games, left_on='_id', right_on='_id', how='inner')
 
     return df
 
