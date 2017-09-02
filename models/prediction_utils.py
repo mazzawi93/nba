@@ -39,7 +39,7 @@ def betting(hprob, aprob, df):
     :param df: Dataframe containing odds and results
     :return: Return on investment
     """
-    r = np.arange(1, 2, 0.05)
+    r = np.arange(1, 3, 0.05)
 
     hbp = 1 / df['hbet']
     abp = 1 / df['abet']
@@ -66,7 +66,7 @@ def betting(hprob, aprob, df):
         roi.append((np.sum(hp) + np.sum(ap) - nbets) / nbets * 100)
         profit.append(np.sum(hp) + np.sum(ap) - nbets)
 
-    return roi, profit
+    return pd.DataFrame({'r': r, 'roi': np.array(roi), 'profit': np.array(profit)})
 
 
 def attack_constraint(params, constraint, nteams):
@@ -153,7 +153,7 @@ def convert_abilities(opt, model, teams):
     return abilities
 
 
-def player_penalty(games, mw, pen_factor, star=False):
+def player_penalty(games, mw, pen_factor, star_factor=85, star=False, ):
     """
     Determine team penalties if they are missing their best player
 
@@ -186,7 +186,7 @@ def player_penalty(games, mw, pen_factor, star=False):
                 home = bp[bp.team == row.home]
 
                 if star:
-                    home_star = home[home.beta >= np.percentile(bp.beta, 85)]
+                    home_star = home[home.beta >= np.percentile(bp.beta, star_factor)]
 
                     for p in home_star.index:
                         if p not in row.hplayers:
@@ -204,7 +204,7 @@ def player_penalty(games, mw, pen_factor, star=False):
                 away = bp[bp.team == row.away]
 
                 if star:
-                    away_star = away[away.beta >= np.percentile(bp.beta, 85)]
+                    away_star = away[away.beta >= np.percentile(bp.beta, star_factor)]
 
                     for p in away_star.index:
                         if p not in row.aplayers:

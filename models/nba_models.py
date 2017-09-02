@@ -7,11 +7,11 @@ from db import mongo_utils, process_utils, datasets
 import pandas as pd
 
 
-def dixon_coles(params, games, nteams, week, time):
+def dixon_coles(params, games, nteams, week, mw):
     """
     This is the likelihood function for the Dixon Coles model adapted for basketball.
 
-    :param time: Time decay factor (Bigger number results in higher weighting for recent matches)
+    :param mw: Time decay factor (Bigger number results in higher weighting for recent matches)
     :param week: Current week of the simulation
     :param nteams: Number of teams in dataset
     :param params: Dixon-Coles Model Parameters
@@ -23,18 +23,26 @@ def dixon_coles(params, games, nteams, week, time):
     amean = params[games['away']] * params[games['home'] + nteams]
 
     likelihood = poisson.logpmf(games['hpts'], hmean) + poisson.logpmf(games['apts'], amean)
-    weight = np.exp(-time * (week - games['week']))
+    weight = np.exp(-mw * (week - games['week']))
 
     return -np.dot(likelihood, weight)
 
 
-def player_beta(params, pts, tpts, weeks, week_num, time):
+def player_beta(params, pts, tpts, weeks, week_num, mw):
     """
     Likelihood function to determine player beta distribution parameters
 
     :return: Likelihood
     """
     likelihood = beta.logpdf(pts / tpts, params[0], params[1])
-    weight = np.exp(-time * (week_num - weeks))
+    weight = np.exp(-mw * (week_num - weeks))
+
+    return -np.dot(likelihood, weight)
+
+
+def player_poisson(params, pts, weeks, week_num, mw):
+
+    likelihood = poisson.logpmf(pts, params[0])
+    weight = np.exp(-mw * (week_num - weeks))
 
     return -np.dot(likelihood, weight)

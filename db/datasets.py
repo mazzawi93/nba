@@ -211,7 +211,7 @@ def dc_dataframe(teams=None, season=None, bet=False, abilities=False, mw=0.0394,
     return df
 
 
-def player_dataframe(season=None, teams=False, position=False, team_ability=False):
+def player_dataframe(season=None, teams=False, position=False, team_ability=False, poisson=False, mw=0.0394, beta=False):
     """
     Create a Pandas DataFrame for player game logs
 
@@ -258,7 +258,7 @@ def player_dataframe(season=None, teams=False, position=False, team_ability=Fals
     # Team Information
     if teams:
         dc = dc_dataframe(season=season, abilities=team_ability)
-        df = df.merge(dc, left_on='game', right_on='_id', how='inner')
+        df = df.merge(dc, left_on=['game', 'season'], right_on=['_id', 'season'], how='inner')
 
         for key in ['_id', 'week_y', 'date_y']:
             del df[key]
@@ -269,6 +269,40 @@ def player_dataframe(season=None, teams=False, position=False, team_ability=Fals
 
         pos_df = player_position(season)
         df = df.merge(pos_df, left_on=['player', 'season'], right_on=['player', 'season'])
+
+    # Player abilities
+    if poisson or beta:
+
+        weeks = df.groupby('week')
+
+        if poisson:
+            df['poisson'] = 0
+
+        if beta:
+            df['a'] = 0
+            df['b'] = 0
+
+        for week, games in weeks:
+
+            if poisson:
+                abilities = mongo.find_one('player_poisson', {'week': int(week), 'mw': mw}, {'_id': 0, 'week':0, 'mw': 0})
+                abilities = pd.DataFrame.from_dict(abilities, 'index')
+
+                mean = abilities.loc[games['player']][0]
+                df.loc[games.index, 'poisson'] = np.array(mean)
+
+            if beta:
+                abilities = mongo.find_one('player_beta', {'week': int(week), 'mw': mw}, {'_id': 0, 'week': 0, 'mw': 0})
+                abilities = pd.DataFrame.from_dict(abilities, 'index')
+
+                a = abilities.loc[games['player'], 'a']
+                b = abilities.loc[games['player'], 'b']
+                player = abilities.loc[games['player'], 'team']
+                df.loc[games.index, 'a'] = np.array(a)
+                df.loc[games.index, 'b'] = np.array(b)
+
+
+    df.fillna(0, inplace=True)
 
     return df
 

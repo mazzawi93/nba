@@ -90,6 +90,7 @@ class DynamicDixonColes(Basketball):
 
         self.mw = mw
         self.predictions = None
+        self.bets = None
 
         if self.mongo.count('dixon_team', {'mw': mw}) == 0:
             print('Team abilities don\'t exist, generating them now...')
@@ -179,6 +180,57 @@ class DynamicDixonColes(Basketball):
         return percentange, over50
 
 
+class PlayerPoisson(DynamicDixonColes):
+    def __init__(self, mw=0.0394):
+        super().__init__(mw)
+
+        if self.mongo.count('player_poisson', {'mw': self.mw}) == 0:
+            print('Player distributions don\'t exist, generating them now...')
+            self.player_weekly_abilities()
+
+    def player_weekly_abilities(self):
+
+        # Delete the abilities in the database if existing
+        self.mongo.remove('player_poisson', {'mw': self.mw})
+
+        # Datasets
+        start_df = datasets.player_dataframe([2013, 2014])
+        rest_df = datasets.player_dataframe([2015, 2016, 2017])
+
+        # Group them by weeks
+        weeks_df = rest_df.groupby('week')
+
+        for week, stats in weeks_df:
+
+            players = {'week': int(week), 'mw': self.mw}
+
+            for name, games in start_df.groupby('player'):
+
+                opt = minimize(nba.player_poisson, x0=games.pts.mean(), args=(games.pts, games.week, int(week), self.mw))
+
+                if opt.x[0] < 0:
+                    opt.x[0] = 0
+
+                players[str(name)] = opt.x[0]
+
+            self.mongo.insert('player_poisson', players)
+
+            start_df = start_df.append(stats, ignore_index=True)
+
+    def game_predictions(self):
+        self.predictions = game_prediction.poisson_prediction([2015, 2016, 2017], mw=self.mw)
+
+    def player_progression(self, player):
+
+        weeks = self.mongo.find('player_poisson', {'mw': self.mw}, {player: 1, '_id': 0})
+        means = []
+
+        for week in weeks:
+            means.append(week[player])
+
+        return np.array(means)
+
+
 class Players(DynamicDixonColes):
     def __init__(self, mw=0.0394):
         """
@@ -201,8 +253,8 @@ class Players(DynamicDixonColes):
         self.mongo.remove('player_beta', {'mw': self.mw})
 
         # Datasets
-        start_df = datasets.player_dataframe([2013, 2014], teams=True)
-        rest_df = datasets.player_dataframe([2015, 2016, 2017], teams=True)
+        start_df = datasets.player_dataframe([2013, 2014], teams=True, position=True)
+        rest_df = datasets.player_dataframe([2015, 2016, 2017], teams=True, position=True)
 
         # Group them by weeks
         weeks_df = rest_df.groupby('week')
@@ -243,10 +295,14 @@ class Players(DynamicDixonColes):
 
             start_df = start_df.append(stats, ignore_index=True)
 
-    def game_predictions(self, star=False):
+    def game_predictions(self, penalty=0.17, star=False, star_factor=85, bet=False):
 
-        self.predictions = game_prediction.dixon_prediction([2016], mw=self.mw, players=True, star=False,
-                                                            bernoulli=True)
+        if bet:
+            self.predictions, self.bets = game_prediction.dixon_prediction([2015, 2016, 2017], mw=self.mw, penalty=penalty, players=True,
+                                                                           star=star, bet=True, star_factor=star_factor)
+
+        self.predictions = game_prediction.dixon_prediction([2015, 2016, 2017], mw=self.mw, penalty=penalty, players=True, star=star,
+                                                            star_factor=star_factor)
 
     def player_progression(self, player):
 
@@ -254,6 +310,7 @@ class Players(DynamicDixonColes):
         means = []
 
         for week in weeks:
+            print(week)
             means.append(beta.mean(week[player]['a'], week[player]['b']))
 
         return np.array(means)

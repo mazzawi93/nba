@@ -7,6 +7,7 @@ from pymongo import MongoClient
 
 from db import mongo_utils
 from scrape import scrape_utils
+from selenium import webdriver
 
 full_teams = ['Atlanta Hawks', 'Boston Celtics', 'Brooklyn Nets', 'Charlotte Hornets', 'Chicago Bulls',
               'Cleveland Cavaliers', 'Dallas Mavericks', 'Denver Nuggets', 'Detroit Pistons',
