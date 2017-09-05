@@ -3,7 +3,7 @@ from scipy.optimize import minimize
 from scipy.stats import poisson, beta
 from models import prediction_utils as pu
 
-from db import mongo_utils, process_utils, datasets
+from db import mongo, process_utils, datasets
 import pandas as pd
 
 
@@ -41,6 +41,11 @@ def player_beta(params, pts, tpts, weeks, week_num, mw):
 
 
 def player_poisson(params, pts, weeks, week_num, mw):
+    """
+    Likelihood function to determine player poisson parameters
+
+    :return: Likelihood
+    """
 
     likelihood = poisson.logpmf(pts, params[0])
     weight = np.exp(-mw * (week_num - weeks))

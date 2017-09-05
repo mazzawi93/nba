@@ -2,12 +2,12 @@ import numpy as np
 from scipy.stats import beta
 from scipy.stats import bernoulli
 
-from db import datasets, mongo_utils
+from db import datasets, mongo
 from models import prediction_utils as pu
 import pandas as pd
 
 
-def dixon_prediction(season, abilities=None, mw=0, players=False, star=False, bet=False, penalty=0.4, star_factor=85):
+def dixon_prediction(season, abilities=None, mw=0, players=False, star=False, penalty=0.4, star_factor=80):
     """
     Dixon Coles or Robinson game prediction based off the team probabilities.
 
@@ -16,7 +16,7 @@ def dixon_prediction(season, abilities=None, mw=0, players=False, star=False, be
     :return: Accuracy, betting return on investment
     """
 
-    games = datasets.dc_dataframe(season=season, abilities=True, mw=mw, players=players, bet=True)
+    games = datasets.game_dataset(season=season, abilities=True, mw=mw, players=players)
 
     hprob = np.zeros(len(games))
     aprob = np.zeros(len(games))
@@ -39,32 +39,24 @@ def dixon_prediction(season, abilities=None, mw=0, players=False, star=False, be
         hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(hmean * row.hpen, amean * row.apen)
 
     # Scale odds so they add to 1
-    #scale = 1 / (hprob + aprob)
-    #hprob = hprob * scale
-    #aprob = aprob * scale
+    scale = 1 / (hprob + aprob)
+    hprob = hprob * scale
+    aprob = aprob * scale
 
     # Actual match winners
     winners = np.where(games.hpts > games.apts, games.home, games.away)
     predictions = np.where(hprob > aprob, games.home, games.away)
 
-    scores = np.where(games.hpts > games.apts, np.log(hprob), np.log(aprob))
-    print(np.sum(scores))
-
-
     outcomes = pd.DataFrame({'winner': winners, 'prediction': predictions, 'month': games.date.dt.month,
-                             'prob': np.maximum(hprob, aprob), 'correct': np.equal(winners, predictions),
-                             'season': games.season})
-
-    if bet:
-        betting = pu.betting(hprob, aprob, games)
-        return outcomes, betting
+                             'correct': np.equal(winners, predictions),
+                             'season': games.season, 'hprob': hprob, 'aprob': aprob})
 
     return outcomes
 
 
 def poisson_prediction(season, mw=0.0394):
     players = datasets.player_dataframe(season, poisson=True, mw=mw)
-    games = datasets.dc_dataframe(season=season)
+    games = datasets.game_dataset(season=season)
 
     games['hmean'], games['amean'] = 0, 0
 
@@ -100,7 +92,7 @@ def poisson_prediction(season, mw=0.0394):
 def beta_prediction(season, mw=0.0394):
 
     players = datasets.player_dataframe(season, beta=True, mw=mw)
-    games = datasets.dc_dataframe(season=season, abilities=True)
+    games = datasets.game_dataset(season=season, abilities=True)
 
     games['hbeta'], games['abeta'] = 0, 0
 

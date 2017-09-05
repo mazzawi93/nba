@@ -2,7 +2,7 @@ from pymongo import MongoClient
 from pymongo import errors
 
 
-class MongoDB:
+class Mongo:
     def __init__(self):
         self.client = MongoClient()
         self.db = self.client.basketball

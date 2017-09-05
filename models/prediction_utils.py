@@ -1,7 +1,7 @@
 from scipy.stats import beta
 import numpy as np
 from scipy.stats import poisson
-from db import mongo_utils
+from db import mongo
 from db import datasets
 import pandas as pd
 
@@ -30,43 +30,6 @@ def determine_probabilities(hmean, amean):
     return np.sum(hprob), np.sum(aprob)
 
 
-def betting(hprob, aprob, df):
-    """
-    Determine the return on investment from betting odds
-
-    :param hprob: Probability of home team winning
-    :param aprob: Probability of away team winning
-    :param df: Dataframe containing odds and results
-    :return: Return on investment
-    """
-    r = np.arange(1, 3, 0.05)
-
-    hbp = 1 / df['hbet']
-    abp = 1 / df['abet']
-
-    # Bookmakers 'take
-    take = hbp + abp
-
-    # Rescale odds so they add to 1
-    hbp = hbp / take
-    abp = abp / take
-
-    roi = []
-    profit = []
-
-    for value in r:
-        # Bet on ome and away teams
-        bet_home = hprob / hbp > value
-        bet_away = aprob / abp > value
-
-        hp = np.dot(bet_home.astype(int), np.where(df['hpts'] > df['apts'], df['hbet'], 0))
-        ap = np.dot(bet_away.astype(int), np.where(df['apts'] > df['hpts'], df['abet'], 0))
-
-        nbets = sum(bet_home) + sum(bet_away)
-        roi.append((np.sum(hp) + np.sum(ap) - nbets) / nbets * 100)
-        profit.append(np.sum(hp) + np.sum(ap) - nbets)
-
-    return pd.DataFrame({'r': r, 'roi': np.array(roi), 'profit': np.array(profit)})
 
 
 def attack_constraint(params, constraint, nteams):
@@ -153,7 +116,7 @@ def convert_abilities(opt, model, teams):
     return abilities
 
 
-def player_penalty(games, mw, pen_factor, star_factor=85, star=False, ):
+def player_penalty(games, mw, pen_factor, star_factor=85, star=False):
     """
     Determine team penalties if they are missing their best player
 
@@ -164,7 +127,7 @@ def player_penalty(games, mw, pen_factor, star_factor=85, star=False, ):
     """
 
     # MongoDB
-    mongo = mongo_utils.MongoDB()
+    m = mongo.Mongo()
 
     # Penalties are multiplied with dixon coles abilities, so no penalty is equal to one
     hpenalty = np.full(len(games), 1, dtype=float)
@@ -174,7 +137,7 @@ def player_penalty(games, mw, pen_factor, star_factor=85, star=False, ):
     for week, stats in games.groupby('week'):
 
         # Best Players
-        bp = mongo.find_one('player_beta', {'week': int(week), 'mw': mw}, {'_id': 0, 'week': 0, 'mw': 0})
+        bp = m.find_one('player_beta', {'week': int(week), 'mw': mw}, {'_id': 0, 'week': 0, 'mw': 0})
         bp = pd.DataFrame.from_dict(bp, 'index')
         bp.dropna(inplace=True)
         bp['beta'] = np.nan_to_num(beta.mean(bp.a, bp.b))

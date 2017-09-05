@@ -4,7 +4,7 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.stats import poisson
 
-from db import datasets, mongo_utils, process_utils
+from db import datasets, mongo, process_utils
 from models import nba_models as nba
 from models import game_prediction
 from models import prediction_utils as pu
@@ -62,14 +62,14 @@ class DixonColes(Basketball):
 
         super().__init__()
 
-        self.dataset = datasets.dc_dataframe(self.teams, season, mw=mw)
+        self.dataset = datasets.game_dataset(self.teams, season, mw=mw)
 
         # Initial Guess for the minimization
         a0 = pu.initial_guess(0, self.nteams)
 
         # Minimize the likelihood function
         self.opt = minimize(nba.dixon_coles, x0=a0,
-                            args=(self.dataset, self.nteams, self.dataset['week'].max() + 28, mw, 'week'),
+                            args=(self.dataset, self.nteams, self.dataset['week'].max() + 28, mw),
                             constraints=self.con, method='SLSQP')
 
         # SciPy minimization requires a numpy array for all abilities, so convert them to readable dict
@@ -86,7 +86,7 @@ class DynamicDixonColes(Basketball):
         super().__init__()
 
         # MongoDB
-        self.mongo = mongo_utils.MongoDB()
+        self.mongo = mongo.Mongo()
 
         self.mw = mw
         self.predictions = None
@@ -107,8 +107,8 @@ class DynamicDixonColes(Basketball):
         self.mongo.remove('dixon_team', {'mw': self.mw})
 
         # Datasets
-        start_df = datasets.dc_dataframe(self.teams, [2013, 2014])
-        rest_df = datasets.dc_dataframe(self.teams, [2015, 2016, 2017])
+        start_df = datasets.game_dataset(self.teams, [2013, 2014])
+        rest_df = datasets.game_dataset(self.teams, [2015, 2016, 2017])
 
         # Initial Guess
         a0 = pu.initial_guess(0, self.nteams)
@@ -137,6 +137,49 @@ class DynamicDixonColes(Basketball):
 
         self.predictions = game_prediction.dixon_prediction([2015, 2016, 2017], mw=self.mw)
 
+    def betting(self):
+        """
+        Determine the return on investment from betting odds
+
+        :return: Return on investment
+        """
+
+        if self.predictions is None:
+            self.game_predictions()
+
+        games = datasets.game_dataset(season=[2015, 2016, 2017], bet=True)
+
+        r = np.arange(1, 3, 0.05)
+
+        hbp = 1 / games['hbet']
+        abp = 1 / games['abet']
+
+        # Bookmakers 'take
+        take = hbp + abp
+
+        # Rescale odds so they add to 1
+        hbp = hbp / take
+        abp = abp / take
+
+        roi = []
+        profit = []
+        n = []
+
+        for value in r:
+            # Bet on ome and away teams
+            bet_home = hprob / hbp > value
+            bet_away = aprob / abp > value
+
+            hp = np.dot(bet_home.astype(int), np.where(games['hpts'] > games['apts'], games['hbet'], 0))
+            ap = np.dot(bet_away.astype(int), np.where(games['apts'] > games['hpts'], games['abet'], 0))
+
+            nbets = sum(bet_home) + sum(bet_away)
+            roi.append((np.sum(hp) + np.sum(ap) - nbets) / nbets * 100)
+            profit.append(np.sum(hp) + np.sum(ap) - nbets)
+            n.append(nbets)
+
+        return pd.DataFrame({'r': r, 'roi': np.array(roi), 'profit': np.array(profit), 'nbets': np.array(n)})
+
     def team_progression(self, team):
         """
         Generate a team's offensive and defensive progression over the weeks
@@ -162,22 +205,6 @@ class DynamicDixonColes(Basketball):
                 defence.append(week[team]['def'])
 
         return np.array(attack), np.array(defence)
-
-    def prediction_percentages(self):
-
-        if self.predictions is None:
-            self.game_predictions()
-
-        percentange = []
-        over50 = []
-
-        for season, games in self.predictions.groupby('season'):
-            over = games[games.prob >= .5]
-
-            percentange.append(sum(games.correct) / len(games))
-            over50.append(sum(over.correct) / len(over))
-
-        return percentange, over50
 
 
 class PlayerPoisson(DynamicDixonColes):
@@ -297,10 +324,6 @@ class Players(DynamicDixonColes):
 
     def game_predictions(self, penalty=0.17, star=False, star_factor=85, bet=False):
 
-        if bet:
-            self.predictions, self.bets = game_prediction.dixon_prediction([2015, 2016, 2017], mw=self.mw, penalty=penalty, players=True,
-                                                                           star=star, bet=True, star_factor=star_factor)
-
         self.predictions = game_prediction.dixon_prediction([2015, 2016, 2017], mw=self.mw, penalty=penalty, players=True, star=star,
                                                             star_factor=star_factor)
 
@@ -314,3 +337,10 @@ class Players(DynamicDixonColes):
             means.append(beta.mean(week[player]['a'], week[player]['b']))
 
         return np.array(means)
+
+    def betting(self):
+
+        if self.predictions is None:
+            self.predictions = game_prediction.dixon_prediction([2015, 2016, 2017], mw=self.mw)
+
+        super().betting()

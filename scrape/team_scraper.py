@@ -5,7 +5,7 @@ import requests
 from bs4 import BeautifulSoup
 from pymongo import MongoClient
 
-from db import mongo_utils
+from db import mongo
 from scrape import scrape_utils
 from selenium import webdriver
 
@@ -43,7 +43,7 @@ def season_game_logs(team, year):
     games = season_stats.find('tbody')
 
     # MongoDB Collection
-    mongo = mongo_utils.MongoDB()
+    mongo = mongo.MongoDB()
 
     # To find opponent statistics
     opponent = re.compile('^opp_.*$')
@@ -104,7 +104,7 @@ def play_by_play(game_id):
     table = soup.find(id='pbp').find_all('tr')
 
     # MongoDB Collection
-    mongo = mongo_utils.MongoDB()
+    mongo = mongo.MongoDB()
 
     pbp = {
         'home': [],
@@ -193,7 +193,7 @@ def team_season_stats(team):
     soup = BeautifulSoup(r.content, "html.parser")
 
     # MongoDB Collection
-    mongo = mongo_utils.MongoDB()
+    mongo = mongo.MongoDB()
 
     # Team's yearly stats are displayed in a table
     season_stats = soup.find(id='stats').find('tbody')
@@ -236,7 +236,7 @@ def betting_lines(year):
     teams = scrape_utils.team_names()
 
     # MongoDB Collection
-    mongo = mongo_utils.MongoDB()
+    mongo = mongo.MongoDB()
 
     # Iterate through each game
     for game in table.find_all('tr'):
@@ -247,8 +247,7 @@ def betting_lines(year):
         # Teams
         team = game.find('a')
 
-        # TODO: Get the point spreads
-        url = team['href'] + '%ou'
+        url = team['href']
 
         print(url)
 

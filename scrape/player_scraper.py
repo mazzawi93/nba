@@ -2,7 +2,7 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
-from db import mongo_utils
+from db import mongo
 from scrape import scrape_utils
 from datetime import datetime
 
@@ -16,7 +16,7 @@ def get_starting_lineups(team, year):
     """
 
     # MongoDB
-    mongo = mongo_utils.MongoDB()
+    mongo = mongo.MongoDB()
 
     # Rename team if relocated
     team = scrape_utils.rename_team(team, year)
@@ -70,7 +70,7 @@ def player_per_game(player):
     """ Scrape a player's yearly per game stats"""
 
     # Mongo
-    mongo = mongo_utils.MongoDB()
+    mongo = mongo.MongoDB()
 
     # Request
     url = "http://www.basketball-reference.com" + player['url']
@@ -129,7 +129,7 @@ def player_box_score(game_id):
     soup = BeautifulSoup(r.content, "html.parser")
 
     # MongoDB Collection
-    mongo = mongo_utils.MongoDB()
+    mongo = mongo.MongoDB()
 
     # The ids of the tables have team names in them
     table_id = re.compile('^box_[a-z]{3}_basic$')

@@ -5,55 +5,13 @@ import pandas as pd
 import numpy as np
 from pymongo import MongoClient
 
-from db import process_utils, mongo_utils
+from db import process_utils, mongo
 
 
-def select_match(win_margin, ids):
-    """
-    Select a match from game logs with a given winning margin
-    :param ids: List of game ids to exclude
-    :param win_margin: Win margin of the game, negative means the away team won.
-    :return: The game selected from MongoDB
-    """
-
-    # Connect to MongoDB
-    client = MongoClient()
-    db = client.basketball
-    collection = db.game_log
-
-    # Negative win margin means the away team won
-    if win_margin < 0:
-        margin = '$lte'
-    else:
-        margin = '$gte'
-
-    match = {
-        'difference': {margin: win_margin},
-        '_id': {'$nin': ids}}
-
-    pipeline = [
-        {'$project':
-            {
-                'hpts': '$home.pts',
-                'apts': '$away.pts',
-                'week': {'$add': [{'$week': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2010]}, 52]}]},
-                'hbet': '$bet.home',
-                'abet': '$bet.away',
-                'difference': {'$subtract': ['$home.pts', '$away.pts']}
-
-            }},
-        {'$match': match},
-        {'$limit': 1}
-    ]
-
-    game = collection.aggregate(pipeline)
-
-    # The limit is 1, so just return the first object
-    for i in game:
-        return i
 
 
-def create_test_set(t, g, margin, dr=True):
+
+def create_test_set(t, g, margin):
     """
     Create test set based on the number of teams and games played per team.
     Games are taken from the game_log mongodb collection based on the winning
@@ -62,10 +20,10 @@ def create_test_set(t, g, margin, dr=True):
     This test set will be used to validate the model because the first team
     will be the strongest, second will be second strongest and so on.
 
-    :param dr: True for DixonRobinson model, False for DixonColes
     :param t: The number of teams
     :param g: The number of games played between a set of two teams (Must be even.)
     :param margin: The winning margin
+
     :return: Pandas Dataframe containing data (Points per team (total and time stamps))
     """
 
@@ -105,11 +63,11 @@ def create_test_set(t, g, margin, dr=True):
                 if j % 2 == 0:
                     game['home'] = teams.index(team)
                     game['away'] = i
-                    match = select_match(margin, ids, dr)
+                    match = process_utils.select_match(margin, ids)
                 else:
                     game['home'] = i
                     game['away'] = teams.index(team)
-                    match = select_match(-margin, ids, dr)
+                    match = process_utils.select_match(-margin, ids)
 
                 # Append the id to the list so that the match doesn't get selected again
                 ids.append(match['_id'])
@@ -126,7 +84,7 @@ def create_test_set(t, g, margin, dr=True):
     return pd.DataFrame(data)
 
 
-def dc_dataframe(teams=None, season=None, bet=False, abilities=False, mw=0.0394, players=False):
+def game_dataset(teams=None, season=None, bet=False, abilities=False, mw=0.0394, players=False):
     """
     Create a Pandas DataFrame for the Dixon and Coles model that uses final scores only.
     Can specify the NBA season, month and if betting information should be included.
@@ -134,11 +92,15 @@ def dc_dataframe(teams=None, season=None, bet=False, abilities=False, mw=0.0394,
     :param teams: Team names
     :param season: NBA Season
     :param bet: Betting Lines
-    :return: Pandas DataFrame
+    :param players: Include player ID's
+    :param mw: Match weight for abilities
+    :param abilities: Include team abilities previously generated
+
+    :return: Pandas DataFrame containing game information
     """
 
     # MongoDB
-    mongo = mongo_utils.MongoDB()
+    m = mongo.Mongo()
 
     fields = {
         'home': '$home.team',
@@ -153,24 +115,28 @@ def dc_dataframe(teams=None, season=None, bet=False, abilities=False, mw=0.0394,
 
     process_utils.season_check(season, fields, match)
 
+    # Include betting odds
     if bet:
         fields['hbet'] = '$bet.home'
         fields['abet'] = '$bet.away'
 
+    # Include players
     if players:
         fields['hplayers'] = '$hplayers.player'
         fields['aplayers'] = '$aplayers.player'
 
+    # Mongo Pipeline
     pipeline = [
         {'$project': fields},
         {'$match': match},
         {'$sort': {'date': 1}}
     ]
 
-    games = mongo.aggregate('game_log', pipeline)
+    games = m.aggregate('game_log', pipeline)
 
     df = pd.DataFrame(list(games))
 
+    # If team names are included, replace index numbers
     if teams is not None:
         hi = np.zeros(len(df), dtype=int)
         ai = np.zeros(len(df), dtype=int)
@@ -210,20 +176,69 @@ def dc_dataframe(teams=None, season=None, bet=False, abilities=False, mw=0.0394,
 
     return df
 
+def player_position(season):
+    """
+    Get the position that each player played in a season.
 
-def player_dataframe(season=None, teams=False, position=False, team_ability=False, poisson=False, mw=0.0394, beta=False):
+    :param season: NBA Season
+
+    :return: DataFrame containing player positions
+    """
+
+
+    # Mongo
+    m = mongo.Mongo()
+
+    # Needs to be a list
+    if isinstance(season, int):
+        season = [season]
+
+    fields = {'seasons': '$seasons'}
+
+    pipeline = [
+        {'$project': fields},
+        {'$unwind': '$seasons'},
+        {'$match': {'seasons.season': {'$in': season}}},
+        {'$group': {'_id': {'player': '$_id', 'season': '$seasons.season'},
+                    'pos': {'$first': '$seasons.pos'}}},
+    ]
+
+    players = m.aggregate('player_season', pipeline)
+
+    df = pd.DataFrame(list(players))
+    df = pd.concat([df.drop(['_id'], axis=1), df['_id'].apply(pd.Series)], axis=1)
+
+    # Replace the hybrid positions with their main position
+    df.replace('SF-PF', 'SF', inplace=True)
+    df.replace('PF-SF', 'PF', inplace=True)
+    df.replace('SG-PG', 'SG', inplace=True)
+    df.replace('SF-SG', 'SF', inplace=True)
+    df.replace('PG-SG', 'PG', inplace=True)
+    df.replace('SG-SF', 'SG', inplace=True)
+    df.replace('PF-C', 'PF', inplace=True)
+    df.replace('C-PF', 'C', inplace=True)
+
+    return df
+
+
+def player_dataframe(season=None, teams=False, position=False, team_ability=False, poisson=False,
+                     mw=0.0394, beta=False):
     """
     Create a Pandas DataFrame for player game logs
 
     :param team_ability: Include team dixon coles abilities
     :param teams: Include team parameters in the dataset
     :param season: NBA Season
+    :param beta: Include player's beta mean
+    :param mw: Match weight
+    :param poisson: Include player poisson abilities
+    :param position: Include Player positions
 
     :return: DataFrame
     """
 
     # MongoDB
-    mongo = mongo_utils.MongoDB()
+    m = mongo.Mongo()
 
     fields = {
         'players': '$players',
@@ -250,14 +265,14 @@ def player_dataframe(season=None, teams=False, position=False, team_ability=Fals
         {'$project': player_stats}
     ]
 
-    games = mongo.aggregate('game_log', pipeline)
+    games = m.aggregate('game_log', pipeline)
 
     df = pd.DataFrame(list(games))
     df = pd.concat([df.drop(['_id'], axis=1), df['_id'].apply(pd.Series)], axis=1)
 
     # Team Information
     if teams:
-        dc = dc_dataframe(season=season, abilities=team_ability)
+        dc = game_dataset(season=season, abilities=team_ability)
         df = df.merge(dc, left_on=['game', 'season'], right_on=['_id', 'season'], how='inner')
 
         for key in ['_id', 'week_y', 'date_y']:
@@ -297,7 +312,6 @@ def player_dataframe(season=None, teams=False, position=False, team_ability=Fals
 
                 a = abilities.loc[games['player'], 'a']
                 b = abilities.loc[games['player'], 'b']
-                player = abilities.loc[games['player'], 'team']
                 df.loc[games.index, 'a'] = np.array(a)
                 df.loc[games.index, 'b'] = np.array(b)
 
@@ -307,33 +321,4 @@ def player_dataframe(season=None, teams=False, position=False, team_ability=Fals
     return df
 
 
-def player_position(season):
-    mongo = mongo_utils.MongoDB()
 
-    fields = {'seasons': '$seasons'}
-
-
-
-    pipeline = [
-        {'$project': fields},
-        {'$unwind': '$seasons'},
-        {'$match': {'seasons.season': {'$in': season}}},
-        {'$group': {'_id': {'player': '$_id', 'season': '$seasons.season'},
-                    'pos': {'$first': '$seasons.pos'}}},
-    ]
-
-    players = mongo.aggregate('player_season', pipeline)
-
-    df = pd.DataFrame(list(players))
-    df = pd.concat([df.drop(['_id'], axis=1), df['_id'].apply(pd.Series)], axis=1)
-
-    df.replace('SF-PF', 'SF', inplace=True)
-    df.replace('PF-SF', 'PF', inplace=True)
-    df.replace('SG-PG', 'SG', inplace=True)
-    df.replace('SF-SG', 'SF', inplace=True)
-    df.replace('PG-SG', 'PG', inplace=True)
-    df.replace('SG-SF', 'SG', inplace=True)
-    df.replace('PF-C', 'PF', inplace=True)
-    df.replace('C-PF', 'C', inplace=True)
-
-    return df
