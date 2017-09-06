@@ -8,9 +8,6 @@ from pymongo import MongoClient
 from db import process_utils, mongo
 
 
-
-
-
 def create_test_set(t, g, margin):
     """
     Create test set based on the number of teams and games played per team.
@@ -157,8 +154,10 @@ def game_dataset(teams=None, season=None, bet=False, abilities=False, mw=0.0394,
         amean = np.array([])
 
         for week, games in df.groupby('week'):
+            ab = m.find_one('dixon_team', {'week': int(week), 'mw': mw})
 
-            ab = mongo.find_one('dixon_team', {'week': int(week), 'mw': mw})
+            if ab is None:
+                raise ValueError('Abilities don\'t exist for that match weight')
 
             # Home Team Advantage
             home_adv = ab.pop('home')
@@ -176,6 +175,7 @@ def game_dataset(teams=None, season=None, bet=False, abilities=False, mw=0.0394,
 
     return df
 
+
 def player_position(season):
     """
     Get the position that each player played in a season.
@@ -184,7 +184,6 @@ def player_position(season):
 
     :return: DataFrame containing player positions
     """
-
 
     # Mongo
     m = mongo.Mongo()
@@ -221,8 +220,8 @@ def player_position(season):
     return df
 
 
-def player_dataframe(season=None, teams=False, position=False, team_ability=False, poisson=False,
-                     mw=0.0394, beta=False):
+def player_dataset(season=None, teams=False, position=False, team_ability=False, poisson=False,
+                   mw=0.0394, beta=False):
     """
     Create a Pandas DataFrame for player game logs
 
@@ -271,7 +270,7 @@ def player_dataframe(season=None, teams=False, position=False, team_ability=Fals
     df = pd.concat([df.drop(['_id'], axis=1), df['_id'].apply(pd.Series)], axis=1)
 
     # Team Information
-    if teams:
+    if teams or team_ability:
         dc = game_dataset(season=season, abilities=team_ability)
         df = df.merge(dc, left_on=['game', 'season'], right_on=['_id', 'season'], how='inner')
 
@@ -280,8 +279,8 @@ def player_dataframe(season=None, teams=False, position=False, team_ability=Fals
 
         df.rename(columns={'week_x': 'week', 'date_x': 'date'}, inplace=True)
 
+    # Player positions
     if position:
-
         pos_df = player_position(season)
         df = df.merge(pos_df, left_on=['player', 'season'], right_on=['player', 'season'])
 
@@ -300,7 +299,8 @@ def player_dataframe(season=None, teams=False, position=False, team_ability=Fals
         for week, games in weeks:
 
             if poisson:
-                abilities = mongo.find_one('player_poisson', {'week': int(week), 'mw': mw}, {'_id': 0, 'week':0, 'mw': 0})
+                abilities = mongo.find_one('player_poisson', {'week': int(week), 'mw': mw},
+                                           {'_id': 0, 'week': 0, 'mw': 0})
                 abilities = pd.DataFrame.from_dict(abilities, 'index')
 
                 mean = abilities.loc[games['player']][0]
@@ -315,10 +315,6 @@ def player_dataframe(season=None, teams=False, position=False, team_ability=Fals
                 df.loc[games.index, 'a'] = np.array(a)
                 df.loc[games.index, 'b'] = np.array(b)
 
-
     df.fillna(0, inplace=True)
 
     return df
-
-
-

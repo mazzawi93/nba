@@ -3,16 +3,15 @@ from pymongo import errors
 
 
 class Mongo:
+    """
+    This class is a wrapper for pymongo.  Allows easier use for different collections.
+    """
+
     def __init__(self):
         self.client = MongoClient()
         self.db = self.client.basketball
 
     def insert(self, collection, doc):
-        """
-        Insert a document into a collection, if key exists do nothing
-        :param collection: MongoDB collection
-        :param doc: Document to insert
-        """
 
         try:
             self.db[collection].insert(doc)

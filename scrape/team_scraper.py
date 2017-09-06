@@ -8,6 +8,7 @@ from pymongo import MongoClient
 from db import mongo
 from scrape import scrape_utils
 from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException
 
 full_teams = ['Atlanta Hawks', 'Boston Celtics', 'Brooklyn Nets', 'Charlotte Hornets', 'Chicago Bulls',
               'Cleveland Cavaliers', 'Dallas Mavericks', 'Denver Nuggets', 'Detroit Pistons',
@@ -43,7 +44,7 @@ def season_game_logs(team, year):
     games = season_stats.find('tbody')
 
     # MongoDB Collection
-    mongo = mongo.MongoDB()
+    m = m.Mongo()
 
     # To find opponent statistics
     opponent = re.compile('^opp_.*$')
@@ -88,7 +89,7 @@ def season_game_logs(team, year):
             result['away'] = curr_team
 
         # Insert into database
-        mongo.insert('game_log', result)
+        m.insert('game_log', result)
 
 
 def play_by_play(game_id):
@@ -104,7 +105,7 @@ def play_by_play(game_id):
     table = soup.find(id='pbp').find_all('tr')
 
     # MongoDB Collection
-    mongo = mongo.MongoDB()
+    m = mongo.Mongo()
 
     pbp = {
         'home': [],
@@ -178,7 +179,7 @@ def play_by_play(game_id):
             quarter += 1
 
     # Insert into database
-    mongo.update('game_log', {'_id': game_id}, {'$set': {'pbp': pbp}})
+    m.update('game_log', {'_id': game_id}, {'$set': {'pbp': pbp}})
 
 
 def team_season_stats(team):
@@ -193,7 +194,7 @@ def team_season_stats(team):
     soup = BeautifulSoup(r.content, "html.parser")
 
     # MongoDB Collection
-    mongo = mongo.MongoDB()
+    m = mongo.Mongo()
 
     # Team's yearly stats are displayed in a table
     season_stats = soup.find(id='stats').find('tbody')
@@ -218,7 +219,7 @@ def team_season_stats(team):
             season.pop(k, None)
 
         # Add to MongoDB
-        mongo.insert('team_season', season)
+        m.insert('team_season', season)
 
 
 def betting_lines(year):
@@ -236,7 +237,10 @@ def betting_lines(year):
     teams = scrape_utils.team_names()
 
     # MongoDB Collection
-    mongo = mongo.MongoDB()
+    m = mongo.Mongo()
+
+    # Webdriver for the over under lines
+    browser = webdriver.Chrome('chromedriver.exe')
 
     # Iterate through each game
     for game in table.find_all('tr'):
@@ -248,8 +252,6 @@ def betting_lines(year):
         team = game.find('a')
 
         url = team['href']
-
-        print(url)
 
         # Team indexes in 3-letter code list
         team = team.text.split('-')
@@ -268,9 +270,65 @@ def betting_lines(year):
             i += 1
 
         # Add the betting line to the database
-
         query = {'home.team': scrape_utils.rename_team(teams[hi]), 'away.team': scrape_utils.rename_team(teams[ai]),
                  'date': date}
-        print(query)
         update = {'$set': {'bet.home': home, 'bet.away': away}}
-        mongo.update('game_log', query, update)
+        m.update('game_log', query, update)
+
+        # Over/Under Betting Lines
+        over_under(browser, m, url, query)
+
+    browser.close()
+
+
+def over_under(browser, m, url, query):
+    """
+    Add historical over/under betting lines to the database
+
+    TODO: When running in the console, the text appears, however when looping through all the games, it runs too quickly
+    which means there needs to be a wait time added
+
+    :param browser: Selenium web driver
+    :param m: Mongo db
+    :param url: URL for odds
+    :param query: Query for mongodb
+    """
+
+    # Get the over/under lines
+    browser.get(url)
+    browser.find_element_by_xpath('/html/body/div/div/div/div/div/section/div/div/div/div/ul/li[3]/a').click()
+
+    # Table sizes
+    largest = 0
+
+    # Bet numbers
+    total = 0
+    over = 0
+    under = 0
+
+    # Loop through all the tables as there are different totals set for over/under
+    for i in range(1, 50):
+
+        try:
+            table = browser.find_element_by_id('sortable-' + str(i))
+            rows = table.find_elements_by_tag_name('tr')
+
+            # The table with the most rows will be used at these are the most common odds
+            if len(rows) > largest:
+                largest = len(rows)
+
+                print(rows[-2].text)
+
+                # Find the total set for over under
+                total_text = rows[-2].text.replace('\n', ' ')
+                total_text = total_text.split(' ')
+                total = float(total_text[-3])
+
+                ou_text = rows[-1].text.split(' ')
+                over = float(ou_text[-2])
+                under = float(ou_text[-1])
+
+        except NoSuchElementException:
+            pass
+
+    m.update('game_log', query, {'$set': {'bet.total': total, 'bet.over': over, 'bet.under': under}})

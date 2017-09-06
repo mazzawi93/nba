@@ -63,6 +63,7 @@ def defense_constraint(params, constraint, nteams):
 def initial_guess(model, nteams):
     """
     Create an initial guess for the minimization function
+    :param nteams: Number of teams
     :param model: The model implemented (0: DC, 1: Base DR model, 2: Time Parameters, 3: winning/losing)
     :return: Numpy array of team abilities (Attack, Defense) and Home Advantage and other factors
     """
@@ -84,6 +85,7 @@ def initial_guess(model, nteams):
 def convert_abilities(opt, model, teams):
     """
     Convert the numpy abilities array into a more usable dict
+    :param teams: Team names
     :param opt: Abilities from optimization
     :param model: Model number determines which parameters are included (0 is Dixon Coles)
     """
@@ -116,10 +118,12 @@ def convert_abilities(opt, model, teams):
     return abilities
 
 
-def player_penalty(games, mw, pen_factor, star_factor=85, star=False):
+def player_penalty(games, mw, pen_factor, star_per=85, star=False):
     """
-    Determine team penalties if they are missing their best player
+    Determine team penalties if they are missing their best/star player
 
+    :param star: Star Player Model or Best Player Model
+    :param star_per: Percentage of star players
     :param games: NBA Games
     :param mw: Match weighting
     :param pen_factor: Multiply the beta mean by this factor
@@ -148,8 +152,9 @@ def player_penalty(games, mw, pen_factor, star_factor=85, star=False):
 
                 home = bp[bp.team == row.home]
 
+                # Star Player
                 if star:
-                    home_star = home[home.beta >= np.percentile(bp.beta, star_factor)]
+                    home_star = home[home.beta >= np.percentile(bp.beta, star_per)]
 
                     for p in home_star.index:
                         if p not in row.hplayers:
@@ -166,8 +171,9 @@ def player_penalty(games, mw, pen_factor, star_factor=85, star=False):
             try:
                 away = bp[bp.team == row.away]
 
+                # Star Player
                 if star:
-                    away_star = away[away.beta >= np.percentile(bp.beta, star_factor)]
+                    away_star = away[away.beta >= np.percentile(bp.beta, star_per)]
 
                     for p in away_star.index:
                         if p not in row.aplayers:

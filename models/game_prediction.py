@@ -7,7 +7,7 @@ from models import prediction_utils as pu
 import pandas as pd
 
 
-def dixon_prediction(season, abilities=None, mw=0, players=False, star=False, penalty=0.4, star_factor=80):
+def dixon_prediction(season, abilities=None, mw=0, players=False, star=False, penalty=0.4, star_players=80):
     """
     Dixon Coles or Robinson game prediction based off the team probabilities.
 
@@ -18,11 +18,13 @@ def dixon_prediction(season, abilities=None, mw=0, players=False, star=False, pe
 
     games = datasets.game_dataset(season=season, abilities=True, mw=mw, players=players)
 
+    # Win probabilities
     hprob = np.zeros(len(games))
     aprob = np.zeros(len(games))
 
+    # Find Player penalties
     if players:
-        games['hpen'], games['apen'] = pu.player_penalty(games, mw, penalty, star_factor, star)
+        games['hpen'], games['apen'] = pu.player_penalty(games, mw, penalty, star_players, star)
     else:
         games['hpen'], games['apen'] = 1, 1
 
@@ -55,18 +57,22 @@ def dixon_prediction(season, abilities=None, mw=0, players=False, star=False, pe
 
 
 def poisson_prediction(season, mw=0.0394):
+    """
+    Game prediction using player's poisson means
+
+    :param season: NBA Season
+    :param mw: Match weight
+    """
     players = datasets.player_dataframe(season, poisson=True, mw=mw)
     games = datasets.game_dataset(season=season)
 
     games['hmean'], games['amean'] = 0, 0
 
     for _id, stats in players.groupby('game'):
-
         hp = np.sum(np.nan_to_num(np.where(stats.phome, stats.poisson, 0)))
         ap = np.sum(np.nan_to_num(np.where(stats.phome, 0, stats.poisson)))
 
         index = games[games._id == _id].index[0]
-
 
         # Set the values
         games.loc[index, 'hmean'] = hp
@@ -75,7 +81,6 @@ def poisson_prediction(season, mw=0.0394):
     hprob, aprob = np.zeros(len(games)), np.zeros(len(games))
 
     for row in games.itertuples():
-
         hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.hmean, row.amean)
 
     # Actual match winners
@@ -90,14 +95,18 @@ def poisson_prediction(season, mw=0.0394):
 
 
 def beta_prediction(season, mw=0.0394):
+    """
+    Game prediction using player beta means (sum)
 
+    :param season: NBA season
+    :param mw: Match weight
+    """
     players = datasets.player_dataframe(season, beta=True, mw=mw)
     games = datasets.game_dataset(season=season, abilities=True)
 
     games['hbeta'], games['abeta'] = 0, 0
 
     for _id, stats in players.groupby('game'):
-
         hp = np.sum(np.nan_to_num(np.where(stats.phome, beta.mean(stats.a, stats.b), 0)))
         ap = np.sum(np.nan_to_num(np.where(stats.phome, 0, beta.mean(stats.a, stats.b))))
 

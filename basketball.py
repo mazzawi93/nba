@@ -207,59 +207,8 @@ class DynamicDixonColes(Basketball):
         return np.array(attack), np.array(defence)
 
 
-class PlayerPoisson(DynamicDixonColes):
-    def __init__(self, mw=0.0394):
-        super().__init__(mw)
-
-        if self.mongo.count('player_poisson', {'mw': self.mw}) == 0:
-            print('Player distributions don\'t exist, generating them now...')
-            self.player_weekly_abilities()
-
-    def player_weekly_abilities(self):
-
-        # Delete the abilities in the database if existing
-        self.mongo.remove('player_poisson', {'mw': self.mw})
-
-        # Datasets
-        start_df = datasets.player_dataframe([2013, 2014])
-        rest_df = datasets.player_dataframe([2015, 2016, 2017])
-
-        # Group them by weeks
-        weeks_df = rest_df.groupby('week')
-
-        for week, stats in weeks_df:
-
-            players = {'week': int(week), 'mw': self.mw}
-
-            for name, games in start_df.groupby('player'):
-
-                opt = minimize(nba.player_poisson, x0=games.pts.mean(), args=(games.pts, games.week, int(week), self.mw))
-
-                if opt.x[0] < 0:
-                    opt.x[0] = 0
-
-                players[str(name)] = opt.x[0]
-
-            self.mongo.insert('player_poisson', players)
-
-            start_df = start_df.append(stats, ignore_index=True)
-
-    def game_predictions(self):
-        self.predictions = game_prediction.poisson_prediction([2015, 2016, 2017], mw=self.mw)
-
-    def player_progression(self, player):
-
-        weeks = self.mongo.find('player_poisson', {'mw': self.mw}, {player: 1, '_id': 0})
-        means = []
-
-        for week in weeks:
-            means.append(week[player])
-
-        return np.array(means)
-
-
 class Players(DynamicDixonColes):
-    def __init__(self, mw=0.0394):
+    def __init__(self, mw=0.0394, poisson=False):
         """
             Computes the player abilities for every week by combining the datasets and using the match weight value,
             starting with the 2013 season as the base values for Players.
@@ -267,7 +216,14 @@ class Players(DynamicDixonColes):
 
         super().__init__(mw=mw)
 
-        if self.mongo.count('player_beta', {'mw': self.mw}) == 0:
+        if poisson:
+            self.dist = 'poisson'
+        else:
+            self.dist = 'beta'
+
+        self.poisson = poisson
+
+        if self.mongo.count('player_' + self.dist, {'mw': self.mw}) == 0:
             print('Player distributions don\'t exist, generating them now...')
             self.player_weekly_abilities()
 
@@ -277,11 +233,11 @@ class Players(DynamicDixonColes):
         """
 
         # Delete the abilities in the database if existing
-        self.mongo.remove('player_beta', {'mw': self.mw})
+        self.mongo.remove('player_' + self.dist, {'mw': self.mw})
 
         # Datasets
-        start_df = datasets.player_dataframe([2013, 2014], teams=True, position=True)
-        rest_df = datasets.player_dataframe([2015, 2016, 2017], teams=True, position=True)
+        start_df = datasets.player_dataset([2013, 2014], teams=True, position=True)
+        rest_df = datasets.player_dataset([2015, 2016, 2017], teams=True, position=True)
 
         # Group them by weeks
         weeks_df = rest_df.groupby('week')
@@ -295,48 +251,64 @@ class Players(DynamicDixonColes):
             for name, games in start_df.groupby('player'):
 
                 team_pts = np.where(games.phome, games.hpts, games.apts)
-                a0 = np.array([games.pts.mean(), (team_pts - games.pts).mean()])
 
-                opt = minimize(nba.player_beta, x0=a0, args=(games.pts, team_pts, games.week, int(week), self.mw))
+                if self.poisson:
+                    opt = minimize(nba.player_poisson, x0=games.pts.mean(),
+                                   args=(games.pts, games.week, int(week), self.mw))
 
-                if opt.status == 2:
-                    players[str(name)] = {'a': a0[0], 'b': a0[1]}
+                    if opt.x[0] < 0:
+                        opt.x[0] = 0
+
+                    players[str(name)] = opt.x[0]
                 else:
-                    players[str(name)] = {'a': opt.x[0], 'b': opt.x[1]}
 
-                try:
-                    teams = stats.groupby('player').get_group(name)
-                    teams = teams[teams.week == week]
-                    teams = np.unique(np.where(teams.phome, teams.home, teams.away))[0]
 
-                    players[str(name)]['team'] = teams
+                    a0 = np.array([games.pts.mean(), (team_pts - games.pts).mean()])
 
-                    position = stats.groupby('player').get_group(name)
-                    position = position.pos.unique()[0]
-                    players[str(name)]['position'] = position
 
-                except KeyError:
-                    pass
+                    opt = minimize(nba.player_beta, x0=a0, args=(games.pts, team_pts, games.week, int(week), self.mw))
 
-            self.mongo.insert('player_beta', players)
+                    if opt.status == 2:
+                        players[str(name)] = {'a': a0[0], 'b': a0[1]}
+                    else:
+                        players[str(name)] = {'a': opt.x[0], 'b': opt.x[1]}
+
+                    try:
+                        teams = stats.groupby('player').get_group(name)
+                        teams = teams[teams.week == week]
+                        teams = np.unique(np.where(teams.phome, teams.home, teams.away))[0]
+
+                        players[str(name)]['team'] = teams
+
+                        position = stats.groupby('player').get_group(name)
+                        position = position.pos.unique()[0]
+                        players[str(name)]['position'] = position
+
+                    except KeyError:
+                        pass
+
+            self.mongo.insert('player_' + self.dist, players)
 
             start_df = start_df.append(stats, ignore_index=True)
 
     def game_predictions(self, penalty=0.17, star=False, star_factor=85, bet=False):
 
         self.predictions = game_prediction.dixon_prediction([2015, 2016, 2017], mw=self.mw, penalty=penalty, players=True, star=star,
-                                                            star_factor=star_factor)
+                                                            star_players=star_factor)
 
     def player_progression(self, player):
 
-        weeks = self.mongo.find('player_beta', {'mw': self.mw}, {player: 1, '_id': 0})
-        means = []
+        weeks = self.mongo.find('player_' + self.dist, {'mw': self.mw}, {player: 1, '_id': 0})
+        abilities = []
+
 
         for week in weeks:
-            print(week)
-            means.append(beta.mean(week[player]['a'], week[player]['b']))
+            if self.poisson:
+                abilities.append(week[player])
+            else:
+                abilities.append(beta.mean(week[player]['a'], week[player]['b']))
 
-        return np.array(means)
+        return np.array(abilities)
 
     def betting(self):
 
