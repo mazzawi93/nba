@@ -1,7 +1,6 @@
 import re
 import requests
 from bs4 import BeautifulSoup
-
 from db import mongo
 from scrape import scrape_utils
 from datetime import datetime
@@ -16,7 +15,7 @@ def get_starting_lineups(team, year):
     """
 
     # MongoDB
-    mongo = mongo.MongoDB()
+    m = mongo.Mongo()
 
     # Rename team if relocated
     team = scrape_utils.rename_team(team, year)
@@ -63,7 +62,7 @@ def get_starting_lineups(team, year):
             lineup.append(player['href'].rsplit('/', 1)[-1].rsplit('.', 1)[0])
 
         # Update document
-        mongo.update('game_log', {'date': date, 'home.team': home, 'away.team': away}, {'$set': {key: lineup}})
+        m.update('game_log', {'date': date, 'home.team': home, 'away.team': away}, {'$set': {key: lineup}})
 
 
 def player_per_game(player):
@@ -129,7 +128,7 @@ def player_box_score(game_id):
     soup = BeautifulSoup(r.content, "html.parser")
 
     # MongoDB Collection
-    mongo = mongo.MongoDB()
+    m = mongo.Mongo()
 
     # The ids of the tables have team names in them
     table_id = re.compile('^box_[a-z]{3}_basic$')
@@ -167,4 +166,4 @@ def player_box_score(game_id):
         home = True
 
     # Insert into database
-    mongo.update('game_log', {'_id': game_id}, {'$set': {'hplayers': home_players, 'aplayers': away_players}})
+    m.update('game_log', {'_id': game_id}, {'$set': {'hplayers': home_players, 'aplayers': away_players}})

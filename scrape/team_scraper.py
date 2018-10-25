@@ -3,12 +3,15 @@ from datetime import datetime
 import re
 import requests
 from bs4 import BeautifulSoup
-from pymongo import MongoClient
+import time
 
 from db import mongo
 from scrape import scrape_utils
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
 
 full_teams = ['Atlanta Hawks', 'Boston Celtics', 'Brooklyn Nets', 'Charlotte Hornets', 'Chicago Bulls',
               'Cleveland Cavaliers', 'Dallas Mavericks', 'Denver Nuggets', 'Detroit Pistons',
@@ -30,7 +33,7 @@ def season_game_logs(team, year):
     """
 
     # Check year value
-    if year > 2017 or year < 1950:
+    if year > 2019 or year < 1950:
         raise ValueError('Year Value Incorrect')
 
     # Rename teams that moved
@@ -44,7 +47,7 @@ def season_game_logs(team, year):
     games = season_stats.find('tbody')
 
     # MongoDB Collection
-    m = m.Mongo()
+    m = mongo.Mongo()
 
     # To find opponent statistics
     opponent = re.compile('^opp_.*$')
@@ -212,6 +215,7 @@ def team_season_stats(team):
 
         # Rename relocated teams
         season['team_id'] = scrape_utils.rename_team(season['team_id'])
+        season['_id'] = season['team_id'] + '_' + str(season_year)
 
         # Remove unwanted stats
         to_remove = ['rank_team', 'foo', 'g', 'mp_per_g']
@@ -229,106 +233,66 @@ def betting_lines(year):
     :param year: NBA Season
     """
 
-    url = "scrape/data/nba_betting_odds_%s.html" % year
-
-    soup = BeautifulSoup(open(url), "html.parser")
-    table = soup.find('tbody')
-
     teams = scrape_utils.team_names()
 
     # MongoDB Collection
     m = mongo.Mongo()
 
     # Webdriver for the over under lines
-    browser = webdriver.Chrome('chromedriver.exe')
+    browser = webdriver.Chrome('chromedriver')
 
-    # Iterate through each game
-    for game in table.find_all('tr'):
+    scrape = True
+    current_page = 1
+    final_href = ''
 
-        # Date
-        date = datetime.strptime(game.find('td', {'class': 's2'}).text, "%d.%m.%Y")
+    while scrape:
+        url = 'https://www.oddsportal.com/basketball/usa/nba-' + str(year-1) + '-' + str(year) + '/results/#/page/' + str(current_page) +'/'
 
-        # Teams
-        team = game.find('a')
+        if url == final_href:
+            scrape = False
 
-        url = team['href']
+        browser.get(url)
 
-        # Team indexes in 3-letter code list
-        team = team.text.split('-')
-        hi = full_teams.index(team[0][:-1])
-        ai = full_teams.index(team[1][1:])
+        time.sleep(5)
 
-        home, away = 0, 0
+        table = browser.find_element_by_xpath('//tbody')
 
-        # Moneylines
-        i = 0
-        for bet in game.find_all('td', {'class': 's1'}):
-            if i == 0:
-                home = round(float(bet.text), 2)
-            else:
-                away = round(float(bet.text), 2)
-            i += 1
+        date = None
+        for row in table.find_elements_by_xpath('//tr'):
 
-        # Add the betting line to the database
-        query = {'home.team': scrape_utils.rename_team(teams[hi]), 'away.team': scrape_utils.rename_team(teams[ai]),
-                 'date': date}
-        update = {'$set': {'bet.home': home, 'bet.away': away}}
-        m.update('game_log', query, update)
+            # Get Row class
+            c = row.get_attribute('class')
 
-        # Over/Under Betting Lines
-        over_under(browser, m, url, query)
+            try:
+                # Date
+                if c == 'center nob-border' and row.text != '':
+                    date = datetime.strptime(row.text[0:11], '%d %b %Y')
+                elif re.search('deactivate', c) and row.text != '':
 
-    browser.close()
+                    i = 1
+                    for ele in row.find_elements_by_xpath('.//td'):
 
+                        if i == 2:
+                            game_teams = ele.text.replace('\n ', '').split(' - ')
+                            home_team = teams[full_teams.index(game_teams[0])]
+                            away_team = teams[full_teams.index(game_teams[1])]
+                        elif i == 4:
+                            home_odds = float(ele.text)
+                        elif i == 5:
+                            away_odds = float(ele.text)
+                        i = i + 1
 
-def over_under(browser, m, url, query):
-    """
-    Add historical over/under betting lines to the database
+                    # Update the Logs to add betting odds
+                    m.update('game_log', {'date': date, 'home.team': home_team, 'away.team': away_team}, {'$set': {'home.odds': home_odds, 'away.odds': away_odds}})
 
-    TODO: When running in the console, the text appears, however when looping through all the games, it runs too quickly
-    which means there needs to be a wait time added
+            except ValueError:
+                pass
 
-    :param browser: Selenium web driver
-    :param m: Mongo db
-    :param url: URL for odds
-    :param query: Query for mongodb
-    """
+        if current_page == 1:
+            page = browser.find_element_by_id('pagination')
+            for anchor in page.find_elements_by_xpath('.//a'):
+                final_href = anchor.get_attribute('href')
 
-    # Get the over/under lines
-    browser.get(url)
-    browser.find_element_by_xpath('/html/body/div/div/div/div/div/section/div/div/div/div/ul/li[3]/a').click()
+        current_page = current_page + 1
 
-    # Table sizes
-    largest = 0
-
-    # Bet numbers
-    total = 0
-    over = 0
-    under = 0
-
-    # Loop through all the tables as there are different totals set for over/under
-    for i in range(1, 50):
-
-        try:
-            table = browser.find_element_by_id('sortable-' + str(i))
-            rows = table.find_elements_by_tag_name('tr')
-
-            # The table with the most rows will be used at these are the most common odds
-            if len(rows) > largest:
-                largest = len(rows)
-
-                print(rows[-2].text)
-
-                # Find the total set for over under
-                total_text = rows[-2].text.replace('\n', ' ')
-                total_text = total_text.split(' ')
-                total = float(total_text[-3])
-
-                ou_text = rows[-1].text.split(' ')
-                over = float(ou_text[-2])
-                under = float(ou_text[-1])
-
-        except NoSuchElementException:
-            pass
-
-    m.update('game_log', query, {'$set': {'bet.total': total, 'bet.over': over, 'bet.under': under}})
+    browser.quit()
