@@ -1,9 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import re
 import requests
 from bs4 import BeautifulSoup
 import time
+import pytz
 
 from db import mongo
 from scrape import scrape_utils
@@ -93,7 +94,6 @@ def season_game_logs(team, year):
 
         # Insert into database
         m.insert('game_log', result)
-
 
 def play_by_play(game_id):
     """
@@ -246,7 +246,11 @@ def betting_lines(year):
     final_href = ''
 
     while scrape:
-        url = 'https://www.oddsportal.com/basketball/usa/nba-' + str(year-1) + '-' + str(year) + '/results/#/page/' + str(current_page) +'/'
+
+        if year == 2019:
+            url = 'https://www.oddsportal.com/basketball/usa/nba/results/#/page/' + str(current_page) +'/'
+        else:
+            url = 'https://www.oddsportal.com/basketball/usa/nba-' + str(year - 1) + '-' + str(year) + '/results/#/page/' + str(current_page) +'/'
 
         if url == final_href:
             scrape = False
@@ -266,12 +270,14 @@ def betting_lines(year):
             try:
                 # Date
                 if c == 'center nob-border' and row.text != '':
-                    date = datetime.strptime(row.text[0:11], '%d %b %Y')
+                    date = row.text[0:11]
                 elif re.search('deactivate', c) and row.text != '':
 
                     i = 1
                     for ele in row.find_elements_by_xpath('.//td'):
 
+                        if i == 1:
+                            timestamp = ele.text
                         if i == 2:
                             game_teams = ele.text.replace('\n ', '').split(' - ')
                             home_team = teams[full_teams.index(game_teams[0])]
@@ -282,12 +288,33 @@ def betting_lines(year):
                             away_odds = float(ele.text)
                         i = i + 1
 
-                    # Update the Logs to add betting odds
-                    m.update('game_log', {'date': date, 'home.team': home_team, 'away.team': away_team}, {'$set': {'home.odds': home_odds, 'away.odds': away_odds}})
+                    date2 = datetime.strptime(date + ' ' + timestamp, '%d %b %Y %H:%M')
+
+                    # Convert to the correct time zone
+                    gmt = pytz.timezone('Etc/GMT+0')
+                    local = pytz.timezone('America/New_York')
+                    gmt_dt = gmt.localize(date2)
+                    local_dt = gmt_dt.astimezone(local)
+                    local_dt = datetime(local_dt.year, local_dt.month, local_dt.day)
+
+                    # Rename team abr. if needed
+                    home_team = scrape_utils.rename_team(home_team)
+                    away_team = scrape_utils.rename_team(away_team)
+
+                    # Update the database with odds
+                    query = m.update('game_log', {'date': local_dt, 'home.team': home_team, 'away.team': away_team}, {'$set': {'home.odds': home_odds, 'away.odds': away_odds}})
+
+                    # IF the game doesn't exist, subtract the date by one and try again (For some reason the dates are messed on the odds website)
+                    if query['updatedExisting'] == False:
+                        m.update('game_log', {'date': local_dt-timedelta(days = 1), 'home.team': home_team, 'away.team': away_team}, {'$set': {'home.odds': home_odds, 'away.odds': away_odds}})
+
 
             except ValueError:
                 pass
+            except TypeError:
+                pass
 
+        # If this is the first page, find the last page url
         if current_page == 1:
             page = browser.find_element_by_id('pagination')
             for anchor in page.find_elements_by_xpath('.//a'):

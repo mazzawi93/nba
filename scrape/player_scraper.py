@@ -69,7 +69,7 @@ def player_per_game(player):
     """ Scrape a player's yearly per game stats"""
 
     # Mongo
-    mongo = mongo.MongoDB()
+    m= mongo.MongoDB()
 
     # Request
     url = "http://www.basketball-reference.com" + player['url']
@@ -113,7 +113,7 @@ def player_per_game(player):
 
         player_stats['seasons'].append(season)
 
-    mongo.insert('player_season', player_stats)
+    m.insert('player_season', player_stats)
 
 
 def player_box_score(game_id):
