@@ -234,7 +234,7 @@ def oddsportal_login():
     pass_input = browser.find_element_by_xpath('//*[@id="login-password1"]')
 
     # Input Password
-    pass_input.send_keys('')
+    pass_input.send_keys('8$NPeo2G9d5h')
     pass_input.send_keys(Keys.ENTER)
 
     # Click login

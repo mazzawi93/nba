@@ -30,8 +30,6 @@ def determine_probabilities(hmean, amean):
     return np.sum(hprob), np.sum(aprob)
 
 
-
-
 def attack_constraint(params, constraint, nteams):
     """
     Attack parameter constraint for the likelihood functions
@@ -89,7 +87,7 @@ def convert_abilities(opt, model, teams):
     :param opt: Abilities from optimization
     :param model: Model number determines which parameters are included (0 is Dixon Coles)
     """
-    abilities = {'model': model}
+    abilities = {'model': model, 'att': {}, 'def': {}}
 
     i = 0
 
@@ -97,10 +95,8 @@ def convert_abilities(opt, model, teams):
 
     # Attack and defense
     for team in teams:
-        abilities[team] = {
-            'att': opt[i],
-            'def': opt[i + nteams]
-        }
+        abilities['att'][team] = opt[i]
+        abilities['def'][team] = opt[i + nteams]
         i += 1
 
     # Home Advantage

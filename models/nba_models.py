@@ -19,10 +19,10 @@ def dixon_coles(params, games, nteams, week, mw):
     :return: Log Likelihood from the Dixon-Coles Model
     """
 
-    hmean = params[games['home']] * params[games['away'] + nteams] * params[nteams * 2]
-    amean = params[games['away']] * params[games['home'] + nteams]
+    hmean = params[games['home_team']] * params[games['away_team'] + nteams] * params[nteams * 2]
+    amean = params[games['away_team']] * params[games['home_team'] + nteams]
 
-    likelihood = poisson.logpmf(games['hpts'], hmean) + poisson.logpmf(games['apts'], amean)
+    likelihood = poisson.logpmf(games['home_pts'], hmean) + poisson.logpmf(games['away_pts'], amean)
     weight = np.exp(-mw * (week - games['week']))
 
     return -np.dot(likelihood, weight)

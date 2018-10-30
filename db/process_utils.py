@@ -25,8 +25,8 @@ def season_check(season, fields, match):
         else:
             # Raise error if year value is incorrect
             for year in season:
-                if year < 2013 or year > 2017:
-                    raise ValueError("Years must be within the range 2013-2017")
+                if year < 2013 or year > 2019:
+                    raise ValueError("Years must be within the range 2013-2019")
 
             # Add season for aggregation query
             fields['season'] = 1
@@ -55,45 +55,3 @@ def name_teams(test, nteams=None):
                 team_names.append(string.ascii_uppercase[i - 26] + string.ascii_uppercase[i - 26])
 
         return team_names
-
-
-def select_match(win_margin, ids):
-    """
-    Select a match from game logs with a given winning margin
-
-    :param ids: List of game IDs to exclude
-    :param win_margin: Win margin of the game, negative means the away team won.
-    :return: The game selected from MongoDB
-    """
-
-    # Connect to MongoDB
-    m = mongo.Mongo()
-
-    # Negative win margin means the away team won
-    if win_margin < 0:
-        margin = '$lte'
-    else:
-        margin = '$gte'
-
-    # Match information
-    match = {
-        'difference': {margin: win_margin},
-        '_id': {'$nin': ids}}
-
-    # MongoDB Pipeline
-    pipeline = [
-        {'$project':
-            {
-                'hpts': '$home.pts',
-                'apts': '$away.pts',
-                'difference': {'$subtract': ['$home.pts', '$away.pts']}
-            }},
-        {'$match': match},
-        {'$limit': 1}
-    ]
-
-    game = m.aggregate('game_log', pipeline)
-
-    # The limit is 1, so just return the first object
-    for i in game:
-        return i
