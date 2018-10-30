@@ -39,8 +39,8 @@ def dixon_prediction(season, mw=0.044):
     hprob = hprob * scale
     aprob = aprob * scale
 
-    outcomes = outcomes.drop(['home', 'home_attack', 'home_defence', 'away_attack', 'away_defence', 'week'], axis = 1)
-    outcomes['hprob'] = hprob
-    outcomes['aprob'] = aprob
+    games = games.drop(['home', 'home_attack', 'home_defence', 'away_attack', 'away_defence', 'week'], axis = 1)
+    games['hprob'] = hprob
+    games['aprob'] = aprob
 
-    return outcomes
+    return games
