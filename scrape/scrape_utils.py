@@ -2,6 +2,8 @@ import string
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
 
 
 def team_names():
@@ -215,3 +217,26 @@ def stat_parse(stat_name, stat):
         return 0
     except ValueError:
         return stat
+
+def oddsportal_login():
+    """ Log in for oddsportal so that all odds are available."""
+
+    # Selenium web browser
+    browser = webdriver.Chrome('chromedriver')
+
+    # Go to login page
+    browser.get('https://www.oddsportal.com/login/')
+
+    # Fill in username
+    browser.find_element_by_xpath('//*[@id="login-username1"]').send_keys('tonymazz')
+
+    # fill in password
+    pass_input = browser.find_element_by_xpath('//*[@id="login-password1"]')
+
+    # Input Password
+    pass_input.send_keys('')
+    pass_input.send_keys(Keys.ENTER)
+
+    # Click login
+
+    return browser

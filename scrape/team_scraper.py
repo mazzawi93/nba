@@ -1,18 +1,10 @@
 from datetime import datetime, timedelta
 
-import re
-import requests
+import re, requests, time, pytz
 from bs4 import BeautifulSoup
-import time
-import pytz
-
 from db import mongo
 from scrape import scrape_utils
-from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
+import pandas as pd
 
 full_teams = ['Atlanta Hawks', 'Boston Celtics', 'Brooklyn Nets', 'Charlotte Hornets', 'Chicago Bulls',
               'Cleveland Cavaliers', 'Dallas Mavericks', 'Denver Nuggets', 'Detroit Pistons',
@@ -94,6 +86,7 @@ def season_game_logs(team, year):
 
         # Insert into database
         m.insert('game_log', result)
+
 
 def play_by_play(game_id):
     """
@@ -188,6 +181,7 @@ def play_by_play(game_id):
 def team_season_stats(team):
     """
     Scrape a team's season stats for every year and store it in the database
+
     :param team: NBA Team
     """
 
@@ -238,8 +232,9 @@ def betting_lines(year):
     # MongoDB Collection
     m = mongo.Mongo()
 
-    # Webdriver for the over under lines
-    browser = webdriver.Chrome('chromedriver')
+    # Webdrivers
+    browser = scrape_utils.oddsportal_login()
+    game_browser = scrape_utils.oddsportal_login()
 
     scrape = True
     current_page = 1
@@ -259,60 +254,67 @@ def betting_lines(year):
 
         time.sleep(5)
 
-        table = browser.find_element_by_xpath('//tbody')
+        # This will skip a page of playoff games
+        if current_page > 1 or year == 2019:
+            table = browser.find_element_by_xpath('//tbody')
+            date = None
+            for row in table.find_elements_by_xpath('.//tr'):
 
-        date = None
-        for row in table.find_elements_by_xpath('//tr'):
+                # Get Row class
+                c = row.get_attribute('class')
+                try:
+                    # Date
+                    if c == 'center nob-border' and row.text != '':
+                        date = row.text[0:11]
+                    elif re.search('deactivate', c) and row.text != '':
 
-            # Get Row class
-            c = row.get_attribute('class')
+                        # Get all Game Odds
+                        href = row.find_element_by_xpath('.//a').get_attribute('href')
+                        sportsbook_odds = scrape_game_odds(game_browser, href)
 
-            try:
-                # Date
-                if c == 'center nob-border' and row.text != '':
-                    date = row.text[0:11]
-                elif re.search('deactivate', c) and row.text != '':
+                        i = 1
+                        # Iterate through row elements to get game information to match with local database
+                        for ele in row.find_elements_by_xpath('.//td'):
 
-                    i = 1
-                    for ele in row.find_elements_by_xpath('.//td'):
+                            if i == 1:
+                                timestamp = ele.text
+                            if i == 2:
 
-                        if i == 1:
-                            timestamp = ele.text
-                        if i == 2:
-                            game_teams = ele.text.replace('\n ', '').split(' - ')
-                            home_team = teams[full_teams.index(game_teams[0])]
-                            away_team = teams[full_teams.index(game_teams[1])]
-                        elif i == 4:
-                            home_odds = float(ele.text)
-                        elif i == 5:
-                            away_odds = float(ele.text)
-                        i = i + 1
+                                game_teams = ele.text.replace('\n ', '').split(' - ')
+                                home_team = teams[full_teams.index(game_teams[0])]
+                                away_team = teams[full_teams.index(game_teams[1])]
 
-                    date2 = datetime.strptime(date + ' ' + timestamp, '%d %b %Y %H:%M')
+                            i = i + 1
 
-                    # Convert to the correct time zone
-                    gmt = pytz.timezone('Etc/GMT+0')
-                    local = pytz.timezone('America/New_York')
-                    gmt_dt = gmt.localize(date2)
-                    local_dt = gmt_dt.astimezone(local)
-                    local_dt = datetime(local_dt.year, local_dt.month, local_dt.day)
+                        date2 = datetime.strptime(date + ' ' + timestamp, '%d %b %Y %H:%M')
 
-                    # Rename team abr. if needed
-                    home_team = scrape_utils.rename_team(home_team)
-                    away_team = scrape_utils.rename_team(away_team)
+                        # Convert to the correct time zone
+                        gmt = pytz.timezone('Etc/GMT+0')
+                        local = pytz.timezone('America/New_York')
+                        gmt_dt = gmt.localize(date2)
+                        local_dt = gmt_dt.astimezone(local)
+                        local_dt = datetime(local_dt.year, local_dt.month, local_dt.day)
 
-                    # Update the database with odds
-                    query = m.update('game_log', {'date': local_dt, 'home.team': home_team, 'away.team': away_team}, {'$set': {'home.odds': home_odds, 'away.odds': away_odds}})
-
-                    # IF the game doesn't exist, subtract the date by one and try again (For some reason the dates are messed on the odds website)
-                    if query['updatedExisting'] == False:
-                        m.update('game_log', {'date': local_dt-timedelta(days = 1), 'home.team': home_team, 'away.team': away_team}, {'$set': {'home.odds': home_odds, 'away.odds': away_odds}})
+                        # Rename team abr. if needed
+                        home_team = scrape_utils.rename_team(home_team)
+                        away_team = scrape_utils.rename_team(away_team)
 
 
-            except ValueError:
-                pass
-            except TypeError:
-                pass
+
+                        # Update the database with odds
+                        query = m.update('game_log', {'date': local_dt, 'home.team': home_team, 'away.team': away_team}, {'$set': {'odds': sportsbook_odds}})
+
+
+                        # IF the game doesn't exist, subtract the date by one and try again (For some reason the dates are messed on the odds website)
+                        if query['updatedExisting'] == False:
+                            query = m.update('game_log', {'date': local_dt-timedelta(days = 1), 'home.team': home_team, 'away.team': away_team}, {'$set': {'odds': sportsbook_odds}})
+
+                        print(home_team, away_team, local_dt, query)
+
+                except ValueError:
+                    pass
+                except TypeError:
+                    pass
 
         # If this is the first page, find the last page url
         if current_page == 1:
@@ -323,3 +325,46 @@ def betting_lines(year):
         current_page = current_page + 1
 
     browser.quit()
+    game_browser.quit()
+
+
+def scrape_game_odds(selenium_driver, url):
+    """
+    Scrape odds by all sportsbooks for a specific game and return a DataFrame.
+
+    :param selenium_driver: Driver that is already logged into oddsportal
+    :param url: Url of game with all betting odds
+
+    """
+
+    # Go to Game URL
+    selenium_driver.get(url)
+
+    time.sleep(5)
+
+    # Table with all the odds
+    odds_table = selenium_driver.find_element_by_xpath('//*[@id="odds-data-table"]/div[1]/table/tbody')
+
+    sportsbooks = []
+
+    # Iterate through each row of the table and then get the elements for sportsbook/odds
+    for sportsbook_row in odds_table.find_elements_by_xpath('.//tr'):
+
+        i = 1
+        for sportsbook_stat in sportsbook_row.find_elements_by_xpath('.//td'):
+
+            # Table rows are in the same format
+            if i == 1:
+                sportsbook = sportsbook_stat.text
+            elif i == 2:
+                home_odds = float(sportsbook_stat.text)
+            elif i == 3:
+                away_odds = float(sportsbook_stat.text)
+            i += 1
+
+        sportsbooks.append({'sportsbook': sportsbook.strip(), 'home_odds': home_odds, 'away_odds': away_odds})
+
+    # TODO: Remove duplicate rows
+    sportsbooks = {'sportsbooks': sportsbooks}
+
+    return sportsbooks

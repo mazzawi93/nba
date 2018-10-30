@@ -1,5 +1,5 @@
-import re
-import requests
+import re, requests
+
 from bs4 import BeautifulSoup
 from db import mongo
 from scrape import scrape_utils
@@ -69,7 +69,7 @@ def player_per_game(player):
     """ Scrape a player's yearly per game stats"""
 
     # Mongo
-    m= mongo.MongoDB()
+    m= mongo.Mongo()
 
     # Request
     url = "http://www.basketball-reference.com" + player['url']
