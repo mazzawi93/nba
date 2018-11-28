@@ -1,13 +1,11 @@
 import numpy as np
-from scipy.stats import beta
-from scipy.stats import bernoulli
-
-from db import datasets, mongo
-from models import prediction_utils as pu
 import pandas as pd
 
+from models import prediction_utils as pu
+from db import datasets
 
-def dixon_prediction(season, mw=0.044):
+
+def dixon_prediction(dataset, mw=0.044):
     """
     Dixon Coles or Robinson game prediction based off the team probabilities.
 
@@ -16,14 +14,13 @@ def dixon_prediction(season, mw=0.044):
     :return: Accuracy, betting return on investment
     """
 
-    games = datasets.game_results(season=2018)
-    abilities, home = datasets.team_abilities(mw = 0.044)
+    games = dataset.copy()
+    abilities = datasets.team_abilities(mw = 0.044)
 
-    games = games.merge(home, how = 'left')
     games = games.merge(abilities, left_on = ['week', 'home_team'], right_on = ['week', 'team']).merge(abilities, left_on = ['week', 'away_team'], right_on = ['week', 'team'])
-    games = games.rename(columns = {'attack_x': 'home_attack', 'attack_y': 'away_attack', 'defence_x': 'home_defence', 'defence_y': 'away_defence'}).drop(['team_x', 'team_y'], axis = 1)
+    games = games.rename(columns = {'attack_x': 'home_attack', 'attack_y': 'away_attack', 'defence_x': 'home_defence', 'defence_y': 'away_defence', 'home_adv_x': 'home_adv'}).drop(['team_x', 'team_y', 'home_adv_y'], axis = 1)
 
-    games['home_mean'] = games['home_attack'] * games['away_defence'] * games['home']
+    games['home_mean'] = games['home_attack'] * games['away_defence'] * games['home_adv']
     games['away_mean'] = games['away_attack'] * games['home_defence']
 
     # Win probabilities
@@ -39,8 +36,8 @@ def dixon_prediction(season, mw=0.044):
     hprob = hprob * scale
     aprob = aprob * scale
 
-    games = games.drop(['home', 'home_attack', 'home_defence', 'away_attack', 'away_defence', 'week'], axis = 1)
+    games = games[['_id', 'season', 'date', 'home_team', 'home_pts', 'away_pts', 'away_team']]
     games['hprob'] = hprob
     games['aprob'] = aprob
 
-    return games
+    return games.sort_values('date')

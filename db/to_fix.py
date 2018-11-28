@@ -460,3 +460,31 @@ def beta_prediction(season, mw=0.0394):
                              'season': games.season})
 
     return outcomes
+
+
+# TODO: Update
+def team_progression(self, team):
+    """
+    Generate a team's offensive and defensive progression over the weeks
+
+    :param team: NBA team or 'home' for the home court advantage
+    :return: Attack and defense abilities for team
+    """
+
+    if team not in self.teams and team != 'home':
+        raise ValueError('Team does not exist.')
+
+    weeks = self.mongo.find('dixon_team', {'mw': self.mw}, {team: 1})
+
+    attack = []
+    defence = []
+
+    for week in weeks:
+
+        if team == 'home':
+            attack.append(week[team])
+        else:
+            attack.append(week[team]['att'])
+            defence.append(week[team]['def'])
+
+    return np.array(attack), np.array(defence)

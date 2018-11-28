@@ -127,8 +127,11 @@ def team_abilities(mw):
     defence['week'] = df['week']
     defence = defence.melt('week', var_name = 'team', value_name = 'defence')
 
-    home_df = df[['home', 'week']]
+    home_adv = pd.DataFrame(df['home_adv'].values.tolist())
+    home_adv['week'] = df['week']
+    home_adv = home_adv.melt('week', var_name = 'team', value_name = 'home_adv')
 
     df = attack.merge(defence)
+    df = df.merge(home_adv)
 
-    return df, home_df
+    return df

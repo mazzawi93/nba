@@ -75,7 +75,7 @@ def initial_guess(model, nteams):
     if model == 2:
         params = np.full((1, 5), 1.05, dtype=float)
     else:
-        params = np.full((1, 1), 1.05, dtype=float)
+        params = np.full((1, nteams), 1.0, dtype=float)
 
     return np.append(teams, params)
 
@@ -87,7 +87,7 @@ def convert_abilities(opt, model, teams):
     :param opt: Abilities from optimization
     :param model: Model number determines which parameters are included (0 is Dixon Coles)
     """
-    abilities = {'model': model, 'att': {}, 'def': {}}
+    abilities = {'model': model, 'att': {}, 'def': {}, 'home_adv': {}}
 
     i = 0
 
@@ -97,10 +97,11 @@ def convert_abilities(opt, model, teams):
     for team in teams:
         abilities['att'][team] = opt[i]
         abilities['def'][team] = opt[i + nteams]
+        abilities['home_adv'][team] = opt[i + nteams + nteams]
         i += 1
 
     # Home Advantage
-    abilities['home'] = opt[nteams * 2]
+    #abilities['home'] = opt[nteams * 2]
 
     # Time parameters
     if model >= 2:
