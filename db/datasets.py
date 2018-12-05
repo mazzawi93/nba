@@ -103,7 +103,7 @@ def betting_df(season = None, sportsbook = None):
     return df
 
 
-def team_abilities(mw):
+def team_abilities(mw, att_constraint, def_constraint):
     """
     Return abilities based on the time decay factor
 
@@ -113,7 +113,9 @@ def team_abilities(mw):
     """
 
     m = mongo.Mongo()
-    query = m.find('dixon_team', {'mw': mw}, {'_id': 0, 'model': 0, 'mw':0})
+    query = m.find('dixon_team',
+                   {'mw': mw, 'att_constraint': att_constraint, 'def_constraint': def_constraint},
+                   {'_id': 0, 'model': 0, 'mw':0, 'att_constraint': 0, 'def_constraint': 0})
 
     # The attack and defence columns are dicts, so need to expand them and then
     # melt so that each row is a team/week

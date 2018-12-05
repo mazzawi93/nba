@@ -3,110 +3,28 @@ import time
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
-from scipy.stats import poisson
-
-from scrape import team_scraper, scrape_utils
-
 from db import datasets, mongo, process_utils
 from models import nba_models as nba
-from models import game_prediction
 from models import prediction_utils as pu
-from scipy.stats import beta
 
 
+class nba_model:
 
-def scrape_all():
-    """ Scrape all the information from basketball-reference and oddsportal for betting odds."""
-
-    # Scrape team information by season
-    for team in scrape_utils.team_names():
-        team_scraper.team_season_stats(team)
-        # Each season
-        for year in range(2019, 2020):
-            # Game Logs
-            team_scraper.season_game_logs(team, year)
-
-            # Starting Lineups
-            #player_scraper.get_starting_lineups(team, year)
-
-    # Init mongo to get game IDS for box score scraping
-    m = mongo.Mongo()
-
-    # Game Information (Box Score and Play by Play)
-    for year in range(2018, 2020):
-        for game in m.find('game_log', {'season': year}, {'_id': 1}):
-            team_scraper.play_by_play(game['_id'])
-            player_scraper.player_box_score(game['_id'])
-            print(game['_id'])
-
-
-    # Get player information
-    for player in scrape_utils.get_active_players():
-        print(player)
-        player_scraper.player_per_game(player)
-
-    # Get betting lines (By Year) need from 2014
-    for year in range(2013, 2019):
-        team_scraper.betting_lines(year)
-
-
-
-class Basketball:
-    """
-    Basketball class used to manipulate team abilities and simulate upcoming seasons
-    """
-
-    def __init__(self):
-        """
-        Initialize Basketball class by setting class variables
-        """
+    def __init__(self, mw=0.044, att_constraint = 100, def_constraint = 1):
+        """ Train the model """
 
         self.nteams = 30
         self.teams = process_utils.name_teams(False, 30)
-
-        self.con = [{'type': 'eq', 'fun': pu.attack_constraint, 'args': (100, self.nteams,)},
-                    {'type': 'eq', 'fun': pu.defense_constraint, 'args': (1, self.nteams,)}]
-
         self.abilities = None
 
+        # Value error for attack mean
+        if(att_constraint != 'rolling' and not isinstance(att_constraint, int)):
+            raise ValueError('Attack Constraint must be integer or "rolling"')
 
-class DixonColes(Basketball):
-    """
-    Subclass for the Dixon and Coles model which uses the full time scores of each match.
-    """
+        # Raise error for defence constraint
+        if (not isinstance(def_constraint, int) and def_constraint is not None):
+            raise ValueError('Defence Constraint must be integer')
 
-    def __init__(self, season, mw=0):
-        """
-        Initialize DixonColes instance.
-
-        :param season: NBA Season(s)
-        :param mw: Recent match weight
-        """
-
-        super().__init__()
-
-        self.dataset = datasets.game_results(season, self.teams)
-
-        # Initial Guess for the minimization
-        a0 = pu.initial_guess(0, self.nteams)
-
-        # Minimize the likelihood function
-        self.opt = minimize(nba.dixon_coles, x0=a0,
-                            args=(self.dataset, self.nteams, self.dataset['week'].max() + 28, mw),
-                            constraints=self.con, method='SLSQP')
-
-        # SciPy minimization requires a numpy array for all abilities, so convert them to readable dict
-        self.abilities = pu.convert_abilities(self.opt.x, 0, self.teams)
-
-
-class DynamicDixonColes(Basketball):
-    def __init__(self, mw=0.044):
-        """
-        Computes the team abilities for every week by combining the datasets and using the match weight value,
-        starting with the 2013 season as the base values for teams.
-        """
-
-        super().__init__()
 
         # MongoDB
         self.mongo = mongo.Mongo()
@@ -114,32 +32,49 @@ class DynamicDixonColes(Basketball):
         self.mw = mw
         self.predictions = None
 
-        if self.mongo.count('dixon_team', {'mw': mw}) == 0:
-            print('Team abilities don\'t exist, generating them now...')
-            self.dynamic_abilities()
+        self.att_constraint = att_constraint
+        self.def_constraint = def_constraint
 
-        # Retrieve abilities from db
-        self.abilities = datasets.team_abilities(mw)
 
-    def dynamic_abilities(self):
+        # Train new abilities if they don't exist in the database
+        try:
+            self.abilities = datasets.team_abilities(mw, att_constraint, def_constraint)
+        except AttributeError:
+            self.train()
+
+    def train(self, store = True):
         """
-        Find the weekly abilities of teams and store them in the database.
+        Compute team weekly attack, defence and home advantage parameters
         """
-
-        self.mongo.remove('dixon_team', {'mw': self.mw})
 
         # Datasets
-        start_df = datasets.game_results([2013, 2014], self.teams)
-        rest_df = datasets.game_results([2015, 2016, 2017, 2018, 2019], self.teams)
+        start_df = datasets.game_results([2013, 2014, 2015], self.teams)
+        rest_df = datasets.game_results([2016, 2017, 2018, 2019], self.teams)
 
         # Initial Guess
         a0 = pu.initial_guess(0, self.nteams)
 
+        abilities = []
+
         # Recalculate the Dixon Coles parameters every week after adding the previous week to the dataset
         for week, stats in rest_df.groupby('week'):
+
+
+            if self.att_constraint == 'rolling':
+                weight = np.exp(-self.mw * (week - start_df['week']))
+                att_constraint = np.average(np.append(start_df['home_pts'], start_df['away_pts']), weights = np.append(weight, weight))
+            else:
+                att_constraint = self.att_constraint
+
+            print(week, round(att_constraint))
+
+            con = [{'type': 'eq', 'fun': pu.attack_constraint, 'args': (round(att_constraint), self.nteams,)}]
+
+            if self.def_constraint is not None:
+                con.append({'type': 'eq', 'fun': pu.defense_constraint, 'args': (round(self.def_constraint), self.nteams,)})
+
             # Get team parameters for the current week
-            opt = minimize(nba.dixon_coles, x0=a0, args=(start_df, self.nteams, week, self.mw),
-                           constraints=self.con, method='SLSQP')
+            opt = minimize(nba.dixon_coles, x0=a0, args=(start_df, self.nteams, week, self.mw), constraints=con, method='SLSQP')
 
             abilities = pu.convert_abilities(opt.x, 0, self.teams)
 
@@ -147,57 +82,61 @@ class DynamicDixonColes(Basketball):
             abilities['week'] = int(week)
             abilities['mw'] = self.mw
 
+            # Constraints
+            abilities['att_constraint'] = att_constraint
+            abilities['def_constraint'] = self.def_constraint
+
             self.mongo.insert('dixon_team', abilities)
 
             # Append this week to the database
             start_df = start_df.append(stats, ignore_index=True)
 
-    def game_predictions(self, seasons=None):
+
+
+
+    def store_abilities(self):
+        """ Replace the abilities in the database with the ones generated """
+        print('store abilities')
+
+
+    def predict(self, seasons):
         """
         Game predictions for the 2015 to 2017 NBA seasons using the weekly abilities
         """
 
         games = datasets.game_results(season=seasons)
-        self.predictions = game_prediction.dixon_prediction(games, mw=self.mw)
 
-    def betting_dataframe(self, r, sportsbooks = None):
+        games = games.merge(self.abilities, left_on = ['week', 'home_team'], right_on = ['week', 'team']).merge(self.abilities, left_on = ['week', 'away_team'], right_on = ['week', 'team'])
+        games = games.rename(columns = {'attack_x': 'home_attack', 'attack_y': 'away_attack', 'defence_x': 'home_defence', 'defence_y': 'away_defence', 'home_adv_x': 'home_adv'}).drop(['team_x', 'team_y', 'home_adv_y'], axis = 1)
 
-        if self.predictions is None:
-            self.game_predictions()
+        games['home_mean'] = games['home_attack'] * games['away_defence'] * games['home_adv']
+        games['away_mean'] = games['away_attack'] * games['home_defence']
 
-        odds = datasets.betting_df(sportsbook = sportsbooks)
-        betting = self.predictions.merge(odds, on = '_id', how = 'inner')
+        # Win probabilities
+        hprob = np.zeros(len(games))
+        aprob = np.zeros(len(games))
 
-        hbp = 1/betting['home_odds']
-        abp = 1/betting['away_odds']
+        # Iterate through each game to determine the winner and prediction
+        for row in games.itertuples():
+            hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.home_mean, row.away_mean)
 
-        take = hbp + abp
+        # Scale odds so they add to 1
+        scale = 1 / (hprob + aprob)
+        hprob = hprob * scale
+        aprob = aprob * scale
 
-        hbp = hbp / take
-        abp = abp / take
+        games = games[['_id', 'season', 'date', 'home_team', 'home_pts', 'away_pts', 'away_team']]
+        games['hprob'] = hprob
+        games['aprob'] = aprob
 
-        betting['home_r'] = betting['hprob'] / hbp
-        betting['away_r'] = betting['aprob'] / abp
-
-        r = 1.4
-
-        betting.head()
-        betting['home_bet'] = np.where(betting['home_r'] >= r, 10, 0)
-        betting['away_bet'] = np.where(betting['away_r'] >= r, 10, 0)
-
-        betting['home_revenue'] = np.where((betting['home_pts'] > betting['away_pts']), betting['home_bet'] * betting['home_odds'], 0)
-
-        betting['away_revenue'] = np.where((betting['away_pts'] > betting['home_pts']), betting['away_bet'] * betting['away_odds'], 0)
-
-        betting['profit'] = betting['home_revenue'] - betting['home_bet'] + betting['away_revenue'] - betting['away_bet']
-
-        return betting
+        return games.sort_values('date')
 
 
     def betting_r_one_per_sportsbook(self,
+                                     any = True,
                                      sportsbooks = ['SportsInteraction', 'Pinnacle Sports', 'bet365'],
                                      to_file = False,
-                                     file_name = 'betting.xlsx'
+                                     file_name = 'betting.xlsx',
                                      below_r = 2.05,
                                      starting_bankroll = 2000,
                                      fluc_allowance = 1.5,
@@ -227,16 +166,19 @@ class DynamicDixonColes(Basketball):
             r = np.arange(1, below_r, 0.05)
 
             dollars_bet = []
-            games_bet = []
+            home_games_bet = []
+            away_games_bet = []
             profit = []
             roi = []
+            rob = []
 
             for value in r:
 
                 value = round(value, 2)
                 bankroll = starting_bankroll
                 bet_total = 0
-                game_count = 0
+                home_count = 0
+                away_count = 0
 
                 for game_id, game in games.groupby('_id'):
 
@@ -246,14 +188,18 @@ class DynamicDixonColes(Basketball):
                     away_bet = game.aprob / game.abp
                     away_bet = np.logical_and(away_bet < below_r, away_bet >= value)
 
-                    hbet = home_bet.any()
-                    abet = home_bet.any()
+                    if any:
+                        hbet = home_bet.any()
+                        abet = away_bet.any()
+                    else:
+                        hbet = home_bet.all()
+                        abet = away_bet.all()
 
                     if hbet:
 
                         home_amount = 1/(game.home_odds.max() * fluc_allowance * risk_tolerance) * bankroll
                         bet_total += home_amount
-                        game_count += 1
+                        home_count += 1
                         bankroll = bankroll - home_amount
 
                     if abet:
@@ -261,7 +207,7 @@ class DynamicDixonColes(Basketball):
                         away_amount = 1/(game.away_odds.max() * fluc_allowance * risk_tolerance) * bankroll
                         bet_total += away_amount
                         bankroll = bankroll - away_amount
-                        game_count += 1
+                        away_count += 1
 
                     if hbet:
                         if((game.home_pts > game.away_pts).any()):
@@ -277,10 +223,17 @@ class DynamicDixonColes(Basketball):
                 if(bet_total == 0):
                     roi.append(0)
                 else:
-                    roi.append((bankroll - starting_bankroll)/bet_total * 100)
-                games_bet.append(game_count)
+                    roi.append((bankroll - starting_bankroll)/starting_bankroll * 100)
 
-            b = pd.DataFrame({'r': r, 'roi': roi, 'profit': profit, 'dollars_bet': dollars_bet, 'games_bet': games_bet})
+                if(bet_total == 0):
+                    rob.append(0)
+                else:
+                    rob.append((bankroll-bet_total)/bet_total * 100)
+
+                home_games_bet.append(home_count)
+                away_games_bet.append(away_count)
+
+            b = pd.DataFrame({'r': r, 'rob':rob, 'roi': roi, 'profit': profit, 'dollars_bet': dollars_bet, 'home_bet': home_games_bet, 'away_bet': away_games_bet})
             pd_list.append(b)
 
             if to_file:
@@ -297,7 +250,7 @@ class DynamicDixonColes(Basketball):
                                               to_file = False,
                                               below_r = 2.05,
                                               fluc_allowance = 1.5,
-                                              risk_tolerance = 100,
+                                              risk_tolerance = 10,
                                               starting_bankroll = 2000):
 
         if self.predictions is None:
@@ -324,17 +277,20 @@ class DynamicDixonColes(Basketball):
 
                 r = np.arange(1, below_r, 0.05)
 
-                dollars_bet = []
-                games_bet = []
+                bet_amount = []
+                home_games = []
+                away_games = []
                 profit = []
                 roi = []
+                rob = []
 
                 for value in r:
 
                     value = round(value, 2)
                     bankroll = starting_bankroll
                     bet_total = 0
-                    g = 0
+                    hg = 0
+                    ag = 0
 
                     for game, row in games2.iterrows():
 
@@ -347,14 +303,14 @@ class DynamicDixonColes(Basketball):
                         if home_bet:
                             home_amount = 1/(row.home_odds * fluc_allowance * risk_tolerance)*bankroll
                             bet_total += home_amount
-                            g += 1
+                            hg += 1
                             bankroll = bankroll - home_amount
 
                         if away_bet:
                             away_amount = 1/(row.away_odds * fluc_allowance * risk_tolerance)*bankroll
                             bet_total += away_amount
                             bankroll = bankroll - away_amount
-                            g += 1
+                            ag += 1
 
                         if home_bet:
                             if(row.home_pts > row.away_pts):
@@ -364,15 +320,24 @@ class DynamicDixonColes(Basketball):
                             if(row.away_pts > row.home_pts):
                                 bankroll = bankroll + (away_amount * row.away_odds)
 
-                    dollars_bet.append(bet_total)
+
+                    bet_amount.append(bet_total)
+                    home_games.append(hg)
+                    away_games.append(ag)
+
                     profit.append(bankroll - starting_bankroll)
 
                     if bet_total == 0:
                         roi.append(0)
                     else:
-                        roi.append((bankroll - starting_bankroll)/bet_total * 100)
-                    games_bet.append(g)
-                b = pd.DataFrame({'r': r, 'roi': roi, 'profit': profit, 'dollars_bet': dollars_bet, 'games_bet': games_bet})
+                        roi.append((bankroll - starting_bankroll)/starting_bankroll * 100)
+
+                    if bet_total == 0:
+                        rob.append(0)
+                    else:
+                        rob.append((bankroll - starting_bankroll)/bet_total * 100)
+
+                b = pd.DataFrame({'r': r, 'rob':rob, 'roi': roi, 'profit': profit, 'bet_amount': bet_amount, 'home_games_bet': home_games, 'away_games_bet' : away_games})
                 pd_list.append(b)
                 b.to_excel(writer, str(year), index = False)
             if to_file:

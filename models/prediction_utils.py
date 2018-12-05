@@ -33,12 +33,11 @@ def determine_probabilities(hmean, amean):
 def attack_constraint(params, constraint, nteams):
     """
     Attack parameter constraint for the likelihood functions
-    The Mean of the attack parameters must equal 100
 
     :param constraint: The mean for attack
     :param params: Team Parameters (Attack, Defense and Home Rating)
     :param nteams: The number of teams
-    :return: The mean of the attack - 100
+    :return: The mean of the attack - constraint
     """
 
     return sum(params[:nteams]) / nteams - constraint
@@ -47,7 +46,6 @@ def attack_constraint(params, constraint, nteams):
 def defense_constraint(params, constraint, nteams):
     """
     Attack parameter constraint for the likelihood functions
-    The Mean of the attack parameters must equal 100
 
     :param constraint: Mean for defense
     :param params: Team Parameters (Attack, Defense and Home Rating)
@@ -87,7 +85,7 @@ def convert_abilities(opt, model, teams):
     :param opt: Abilities from optimization
     :param model: Model number determines which parameters are included (0 is Dixon Coles)
     """
-    abilities = {'model': model, 'att': {}, 'def': {}, 'home_adv': {}}
+    abilities = {'att': {}, 'def': {}, 'home_adv': {}}
 
     i = 0
 
@@ -99,18 +97,6 @@ def convert_abilities(opt, model, teams):
         abilities['def'][team] = opt[i + nteams]
         abilities['home_adv'][team] = opt[i + nteams + nteams]
         i += 1
-
-    # Home Advantage
-    #abilities['home'] = opt[nteams * 2]
-
-    # Time parameters
-    if model >= 2:
-        abilities['time'] = {
-            'q1': opt[nteams * 2 + 1],
-            'q2': opt[nteams * 2 + 2],
-            'q3': opt[nteams * 2 + 3],
-            'q4': opt[nteams * 2 + 4]
-        }
 
     return abilities
 
