@@ -213,7 +213,7 @@ class nba_model:
 
         return bets
 
-    def accuracy_by_season(predictions = None):
+    def accuracy_by_season(self, predictions = None):
 
         if predictions is None:
             predictions = self.predict()
@@ -227,7 +227,7 @@ class nba_model:
         return predictions.groupby('season').apply(win_accuracy)
 
 
-    def accuracy_by_season_home_away(predictions = None):
+    def accuracy_by_season_home_away(self, predictions = None):
 
         if predictions is None:
             predictions = self.predict()
