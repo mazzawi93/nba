@@ -1,11 +1,11 @@
-from datetime import datetime, timedelta
-
-import re, requests, time, pytz
+import re, requests, time
+from datetime import datetime
 from bs4 import BeautifulSoup
-from db import mongo
-from scrape import scrape_utils
 import pandas as pd
 from selenium import webdriver
+
+from db import mongo
+from scrape import scrape_utils
 
 full_teams = ['Atlanta Hawks', 'Boston Celtics', 'Brooklyn Nets', 'Charlotte Hornets', 'Chicago Bulls',
               'Cleveland Cavaliers', 'Dallas Mavericks', 'Denver Nuggets', 'Detroit Pistons',
@@ -220,13 +220,7 @@ def team_season_stats(team):
         # Add to MongoDB
         m.insert('team_season', season)
 
-
-def betting_lines(year):
-    """
-    Add historical betting lines to the database
-
-    :param year: NBA Season
-    """
+def scrape_betting_page(url = 'https://classic.sportsbookreview.com/betting-odds/nba-basketball/money-line/', sel_browser = None, insert = False):
 
     team_names = scrape_utils.team_names()
 
@@ -239,9 +233,126 @@ def betting_lines(year):
               'Sacramento', 'San Antonio', 'Toronto', 'Utah',
               'Washington']
 
+    if sel_browser is None:
+        browser = webdriver.Chrome('chromedriver')
+
+    browser.get(url)
+    time.sleep(5)
+
+    # Sportsbooks
+    sb = browser.find_elements_by_id('bookName')
+    sportsbooks = ['Opening']
+
+    # Create list of sportsbooks
+    for sportbook in sb:
+        if len(sportbook.text) > 1:
+            sportsbooks.append(sportbook.text)
+
+    # Get team names and odds
+    games = browser.find_elements_by_class_name('eventLine')
+
+    sportsbooks_games = []
+
+    for game in games:
+        team_elements = game.find_elements_by_tag_name('a')
+
+        i = 0
+
+        away_team = None
+        home_team = None
+
+        # Assign team to correct location
+        for team in team_elements:
+            if i == 1:
+                away_team = team.text
+            elif i == 2:
+                home_team = team.text
+            i += 1
+
+        odds_elements = game.find_elements_by_class_name('eventLine-book-value')
+
+        i = 0
+        away_odds = []
+        home_odds = []
+        home_even = False
+
+        for game_odds in odds_elements:
+
+            if i > 3:
+
+                if i == 4 and game_odds.text == '':
+                    home_even = True
+
+                try:
+                    odds = int(game_odds.text)
+
+                    # Convert odds to decimal
+                    if odds >= 0:
+                        odds = round(odds / 100 + 1, 2)
+                    else:
+                        odds = round(100 / abs(odds) + 1, 2)
+
+                    # Home or away odds
+                    if i % 2 == 0:
+                        if home_even:
+                            try:
+                                home_odds.append(odds)
+                            except ValueError:
+                                home_odds.append(0)
+                        else:
+                            try:
+                                away_odds.append(odds)
+                            except ValueError:
+                                away_odds.append(0)
+                    elif i % 2 != 0:
+                        if home_even:
+                            try:
+                                away_odds.append(odds)
+                            except ValueError:
+                                away_odds.append(0)
+                        else:
+                            try:
+                                home_odds.append(odds)
+                            except ValueError:
+                                home_odds.append(0)
+                except ValueError:
+                    pass
+
+            i += 1
+        try:
+            home_team = scrape_utils.rename_team(team_names[full_teams.index(home_team)])
+            away_team = scrape_utils.rename_team(team_names[full_teams.index(away_team)])
+
+
+
+            if insert:
+                sportsbook_odds = {'sportsbooks': [{'sportsbook': sb, 'home_odds':ho, 'away_odds': ao} for sb, ho, ao in zip(sportsbooks, home_odds, away_odds)]}
+                query = m.update('game_log', {'date': game_date, 'home.team': home_team, 'away.team': away_team}, {'$set': {'odds': sportsbook_odds}})
+            else:
+
+                sportsbook_odds = [{'sportsbook': sb, 'home_odds': ho, 'away_odds': ao, 'home_team': home_team, 'away_team': away_team} for sb, ho, ao in zip(sportsbooks, home_odds, away_odds)]
+                sportsbooks_games.extend(sportsbook_odds)
+
+        except ValueError:
+            pass
+
+    if sel_browser is None:
+        browser.close()
+
+    if not insert:
+        return pd.DataFrame(sportsbooks_games)
+
+
+
+def betting_lines(year):
+    """
+    Add historical betting lines to the database
+
+    :param year: NBA Season
+    """
+
     # MongoDB Collection
     m = mongo.Mongo()
-    browser = webdriver.Chrome('chromedriver')
 
     # Webapges are by dates
     all_dates = m.find('game_log', {'season': year}, {'_id': 0, 'date': 1}).distinct('date')
@@ -252,96 +363,6 @@ def betting_lines(year):
         # Get URL
         url = 'https://classic.sportsbookreview.com/betting-odds/nba-basketball/money-line/?date=' + datetime.strftime(game_date, '%Y%m%d')
 
-        browser.get(url)
-        time.sleep(5)
-
-        # Sportsbooks
-        sb = browser.find_elements_by_id('bookName')
-        sportsbooks = ['Opening']
-
-        # Create list of sportsbooks
-        for sportbook in sb:
-            if len(sportbook.text) > 1:
-                sportsbooks.append(sportbook.text)
-
-        # Get team names and odds
-        games = browser.find_elements_by_class_name('eventLine')
-
-        for game in games:
-            team_elements = game.find_elements_by_tag_name('a')
-
-            i = 0
-
-            away_team = None
-            home_team = None
-
-            # Assign team to correct location
-            for team in team_elements:
-                if i == 1:
-                    away_team = team.text
-                elif i == 2:
-                    home_team = team.text
-                i += 1
-
-            odds_elements = game.find_elements_by_class_name('eventLine-book-value')
-
-            i = 0
-            away_odds = []
-            home_odds = []
-            home_even = False
-
-            for game_odds in odds_elements:
-
-                if i > 3:
-
-                    if i == 4 and game_odds.text == '':
-                        home_even = True
-
-                    try:
-                        odds = int(game_odds.text)
-
-                        # Convert odds to decimal
-                        if odds >= 0:
-                            odds = round(odds / 100 + 1, 2)
-                        else:
-                            odds = round(100 / abs(odds) + 1, 2)
-
-                        # Home or away odds
-                        if i % 2 == 0:
-                            if home_even:
-                                try:
-                                    home_odds.append(odds)
-                                except ValueError:
-                                    home_odds.append(0)
-                            else:
-                                try:
-                                    away_odds.append(odds)
-                                except ValueError:
-                                    away_odds.append(0)
-                        elif i % 2 != 0:
-                            if home_even:
-                                try:
-                                    away_odds.append(odds)
-                                except ValueError:
-                                    away_odds.append(0)
-                            else:
-                                try:
-                                    home_odds.append(odds)
-                                except ValueError:
-                                    home_odds.append(0)
-                    except ValueError:
-                        pass
-
-                i += 1
-            try:
-                home_team = scrape_utils.rename_team(team_names[full_teams.index(home_team)])
-                away_team = scrape_utils.rename_team(team_names[full_teams.index(away_team)])
-
-                sportsbook_odds = {'sportsbooks': [{'sportsbook': sb, 'home_odds':ho, 'away_odds': ao} for sb, ho, ao in zip(sportsbooks, home_odds, away_odds)]}
-
-                query = m.update('game_log', {'date': game_date, 'home.team': home_team, 'away.team': away_team}, {'$set': {'odds': sportsbook_odds}})
-                print(query)
-            except ValueError:
-                pass
+        scrape_betting_page(url, browser, True)
 
     browser.close()
