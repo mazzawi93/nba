@@ -150,7 +150,9 @@ class nba_model:
     def games_to_bet(self,
                      predictions = None,
                      sportsbooks = None,
-                     return_bets_only = False):
+                     return_bets_only = False,
+                     lower_R_bound = 1.55
+                     high_R_bound = 2.05):
 
         """
         Bets
@@ -183,14 +185,15 @@ class nba_model:
         games_df['away_R'] = games_df['aprob'] / games_df['abp']
 
         if return_bets_only:
-            return games_df[(((games_df.home_R >= 1.55) & (games_df.home_R <= 2.05)) | ((games_df.away_R >= 1.55) & (games_df.away_R < 2.05)))]
+            return games_df[(((games_df.home_R >= lower_R_bound) & (games_df.home_R <= high_R_bound)) | ((games_df.away_R >= lower_R_bound) & (games_df.away_R < high_R_bound)))]
         else:
             return games_df
 
 
     def today_games(self,
                     sportsbooks = ['Pinnacle Sports', 'bet365', 'SportsInteraction'],
-                    week = 464):
+                    week = 464,
+                    bets_only = True):
 
         today = team_scraper.scrape_betting_page()
 
@@ -202,7 +205,7 @@ class nba_model:
         today['week'] = week
 
         predictions = self.predict(today)
-        bets = self.betting(predictions, return_bets_only = True)
+        bets = self.betting(predictions, return_bets_only = bets_only)
 
         return bets
 
