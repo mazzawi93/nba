@@ -17,8 +17,6 @@ class nba_model:
                  att_constraint = 100,
                  def_constraint = 1):
 
-        """ Train the model """
-
         self.nteams = 30
         self.teams = process_utils.name_teams(False, 30)
         self.abilities = None
@@ -151,7 +149,7 @@ class nba_model:
                      predictions = None,
                      sportsbooks = None,
                      return_bets_only = False,
-                     lower_R_bound = 1.55
+                     lower_R_bound = 1.55,
                      high_R_bound = 2.05):
 
         """
@@ -163,13 +161,15 @@ class nba_model:
         """
 
         # TODO: Do something if predictions are None
+        if predictions is None:
+            predictions = self.predict()
 
         # Retreive the odds and merge them with the game predictions
         if 'home_odds' not in predictions.columns:
             odds = datasets.betting_df(sportsbooks = sportsbooks)
             games_df = predictions.merge(odds, on = '_id', how = 'inner')
-
-        games_df = predictions
+        else:
+            games_df = predictions
 
         # Get the R value for each game based on the abilities
         hbp = 1/games_df['home_odds']
@@ -180,9 +180,13 @@ class nba_model:
         games_df['hbp'] = hbp / take
         games_df['abp'] = abp / take
 
-
+        # Calculate R value
         games_df['home_R'] = games_df['hprob'] / games_df['hbp']
         games_df['away_R'] = games_df['aprob'] / games_df['abp']
+
+        # floor to two decimal places
+        games_df['home_R'] = np.floor(games_df['home_R'] * 100) / 100
+        games_df['away_R'] = np.floor(games_df['away_R'] * 100) / 100
 
         if return_bets_only:
             return games_df[(((games_df.home_R >= lower_R_bound) & (games_df.home_R <= high_R_bound)) | ((games_df.away_R >= lower_R_bound) & (games_df.away_R < high_R_bound)))]
@@ -205,220 +209,39 @@ class nba_model:
         today['week'] = week
 
         predictions = self.predict(today)
-        bets = self.betting(predictions, return_bets_only = bets_only)
+        bets = self.games_to_bet(predictions, return_bets_only = bets_only)
 
         return bets
 
+    def accuracy_by_season(predictions = None):
 
-    def betting_r_one_per_sportsbook(self,
-                                     any = True,
-                                     sportsbooks = ['SportsInteraction', 'Pinnacle Sports', 'bet365'],
-                                     to_file = False,
-                                     file_name = 'betting.xlsx',
-                                     below_r = 2.05,
-                                     starting_bankroll = 2000,
-                                     fluc_allowance = 1.5,
-                                     risk_tolerance = 10):
+        if predictions is None:
+            predictions = self.predict()
 
-        if self.predictions is None:
-            self.game_predictions()
+        def win_accuracy(group):
+            home_correct = sum((group.home_pts > group.away_pts) & (group.hprob > group.aprob))
+            away_correct = sum((group.away_pts > group.home_pts) & (group.aprob > group.hprob))
 
-        odds = datasets.betting_df(sportsbook = sportsbooks)
-        betting = self.predictions.merge(odds, on = '_id', how = 'inner')
+            return (home_correct + away_correct)/len(group)
 
-        pd_list = []
-
-        if to_file:
-            writer = pd.ExcelWriter(file_name)
-
-        for year, games in betting.groupby('season'):
-
-            hbp = 1/games['home_odds']
-            abp = 1/games['away_odds']
-
-            take = hbp + abp
-
-            games['hbp'] = hbp / take
-            games['abp'] = abp / take
-
-            r = np.arange(1, below_r, 0.05)
-
-            dollars_bet = []
-            home_games_bet = []
-            away_games_bet = []
-            profit = []
-            roi = []
-            rob = []
-
-            for value in r:
-
-                value = round(value, 2)
-                bankroll = starting_bankroll
-                bet_total = 0
-                home_count = 0
-                away_count = 0
-
-                for game_id, game in games.groupby('_id'):
-
-                    home_bet = game.hprob / game.hbp
-                    home_bet = np.logical_and(home_bet < below_r, home_bet >= value)
-
-                    away_bet = game.aprob / game.abp
-                    away_bet = np.logical_and(away_bet < below_r, away_bet >= value)
-
-                    if any:
-                        hbet = home_bet.any()
-                        abet = away_bet.any()
-                    else:
-                        hbet = home_bet.all()
-                        abet = away_bet.all()
-
-                    if hbet:
-
-                        home_amount = 1/(game.home_odds.max() * fluc_allowance * risk_tolerance) * bankroll
-                        bet_total += home_amount
-                        home_count += 1
-                        bankroll = bankroll - home_amount
-
-                    if abet:
-
-                        away_amount = 1/(game.away_odds.max() * fluc_allowance * risk_tolerance) * bankroll
-                        bet_total += away_amount
-                        bankroll = bankroll - away_amount
-                        away_count += 1
-
-                    if hbet:
-                        if((game.home_pts > game.away_pts).any()):
-                            bankroll = bankroll + (home_amount * game.home_odds.max())
-
-                    if abet:
-                        if((game.away_pts > game.home_pts).any()):
-                            bankroll = bankroll + (away_amount * game.away_odds.max())
-
-                dollars_bet.append(bet_total)
-                profit.append(bankroll - starting_bankroll)
-
-                if(bet_total == 0):
-                    roi.append(0)
-                else:
-                    roi.append((bankroll - starting_bankroll)/starting_bankroll * 100)
-
-                if(bet_total == 0):
-                    rob.append(0)
-                else:
-                    rob.append((bankroll-bet_total)/bet_total * 100)
-
-                home_games_bet.append(home_count)
-                away_games_bet.append(away_count)
-
-            b = pd.DataFrame({'r': r, 'rob':rob, 'roi': roi, 'profit': profit, 'dollars_bet': dollars_bet, 'home_bet': home_games_bet, 'away_bet': away_games_bet})
-            pd_list.append(b)
-
-            if to_file:
-                b.to_excel(writer, str(year), index = False)
-
-        if to_file:
-            writer.save()
-
-        return pd_list
+        return predictions.groupby('season').apply(win_accuracy)
 
 
-    def betting_r_pattern_specific_sportsbook(self,
-                                              sportsbooks = None,
-                                              to_file = False,
-                                              below_r = 2.05,
-                                              fluc_allowance = 1.5,
-                                              risk_tolerance = 10,
-                                              starting_bankroll = 2000):
+    def accuracy_by_season_home_away(predictions = None):
 
-        if self.predictions is None:
-            self.game_predictions()
+        if predictions is None:
+            predictions = self.predict()
 
-        odds = datasets.betting_df(sportsbook = sportsbooks)
-        betting = self.predictions.merge(odds, on = '_id', how = 'inner')
+        def home_accuracy(group):
+            home_correct = sum((group.home_pts > group.away_pts) & (group.hprob > group.aprob))
+            num_guesses = sum(group.hprob > group.aprob)
 
-        pd_list = []
+            return home_correct/num_guesses
 
-        for sportsbook, games in betting.groupby('sportsbook'):
+        def away_accuracy(group):
+            home_correct = sum((group.away_pts > group.home_pts) & (group.aprob > group.hprob))
+            num_guesses = sum(group.aprob > group.hprob)
 
-            writer = pd.ExcelWriter(sportsbook + '.xlsx')
+            return home_correct/num_guesses
 
-            for year, games2 in games.groupby('season'):
-
-                hbp = 1/games2['home_odds']
-                abp = 1/games2['away_odds']
-
-                take = hbp + abp
-
-                games2['hbp'] = hbp / take
-                games2['abp'] = abp / take
-
-                r = np.arange(1, below_r, 0.05)
-
-                bet_amount = []
-                home_games = []
-                away_games = []
-                profit = []
-                roi = []
-                rob = []
-
-                for value in r:
-
-                    value = round(value, 2)
-                    bankroll = starting_bankroll
-                    bet_total = 0
-                    hg = 0
-                    ag = 0
-
-                    for game, row in games2.iterrows():
-
-                        home_bet = row.hprob / row.hbp
-                        home_bet = home_bet < below_r and home_bet >= value
-
-                        away_bet = row.aprob / row.abp
-                        away_bet = away_bet < below_r and away_bet >= value
-
-                        if home_bet:
-                            home_amount = 1/(row.home_odds * fluc_allowance * risk_tolerance)*bankroll
-                            bet_total += home_amount
-                            hg += 1
-                            bankroll = bankroll - home_amount
-
-                        if away_bet:
-                            away_amount = 1/(row.away_odds * fluc_allowance * risk_tolerance)*bankroll
-                            bet_total += away_amount
-                            bankroll = bankroll - away_amount
-                            ag += 1
-
-                        if home_bet:
-                            if(row.home_pts > row.away_pts):
-                                bankroll = bankroll + (home_amount * row.home_odds)
-
-                        if away_bet:
-                            if(row.away_pts > row.home_pts):
-                                bankroll = bankroll + (away_amount * row.away_odds)
-
-
-                    bet_amount.append(bet_total)
-                    home_games.append(hg)
-                    away_games.append(ag)
-
-                    profit.append(bankroll - starting_bankroll)
-
-                    if bet_total == 0:
-                        roi.append(0)
-                    else:
-                        roi.append((bankroll - starting_bankroll)/starting_bankroll * 100)
-
-                    if bet_total == 0:
-                        rob.append(0)
-                    else:
-                        rob.append((bankroll - starting_bankroll)/bet_total * 100)
-
-                b = pd.DataFrame({'r': r, 'rob':rob, 'roi': roi, 'profit': profit, 'bet_amount': bet_amount, 'home_games_bet': home_games, 'away_games_bet' : away_games})
-                pd_list.append(b)
-                b.to_excel(writer, str(year), index = False)
-            if to_file:
-                writer.save()
-
-        return pd_list
+        return predictions.groupby(['season']).apply(lambda x: pd.Series({'home': home_accuracy(x), 'away': away_accuracy(x)}))

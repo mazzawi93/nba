@@ -60,7 +60,7 @@ def game_results(season, teams = None):
     return df
 
 
-def betting_df(season = None, sportsbook = None):
+def betting_df(season = None, sportsbooks = None):
     """
     Create a Pandas DataFrame that contains betting information by game/sportsbook.
 
@@ -82,10 +82,10 @@ def betting_df(season = None, sportsbook = None):
         season_match = {'season': {'$in': season}}
 
     # Match the right sportsbook
-    if sportsbook is not None:
-        if isinstance(sportsbook, str):
-            sportsbook = [sportsbook]
-        sportsbook_match = {'sportsbook': {'$in': sportsbook}}
+    if sportsbooks is not None:
+        if isinstance(sportsbooks, str):
+            sportsbooks = [sportsbooks]
+        sportsbook_match = {'sportsbook': {'$in': sportsbooks}}
 
     # Mongo Aggregation
     pipeline = [
