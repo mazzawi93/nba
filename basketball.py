@@ -1,5 +1,5 @@
 import time
-
+import datetime
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
@@ -9,7 +9,6 @@ from models import prediction_utils as pu
 
 from scrape import team_scraper
 
-
 class nba_model:
 
     def __init__(self,
@@ -17,78 +16,94 @@ class nba_model:
                  att_constraint = 100,
                  def_constraint = 1):
 
+        # Team Information
         self.nteams = 30
         self.teams = process_utils.name_teams(False, 30)
-        self.abilities = None
 
         # MongoDB
         self.mongo = mongo.Mongo()
 
+        # Model parameters
         self.mw = mw
-        self.predictions = None
-
         self.att_constraint = att_constraint
         self.def_constraint = def_constraint
 
+        # Model Outputs
+        self.abilities = None
+        self.predictions = None
+
+        # Set to the current week
+        today = datetime.datetime.now()
+        self.week = int(today.strftime("%U")) +  (today.year % 2010 * 52)
 
         # Train new abilities if they don't exist in the database
-        try:
-            self.abilities = datasets.team_abilities(mw, att_constraint, def_constraint)
-        except AttributeError:
-            self.train()
+        if self.mongo.count('dixon_team', {'mw': self.mw, 'att_constraint': self.att_constraint, 'def_constraint': self.def_constraint}) == 0:
+            print('Training All Weeks')
+            self.train_all()
+        elif self.mongo.count('dixon_team', {'mw': self.mw, 'att_constraint': self.att_constraint, 'def_constraint': self.def_constraint, 'week': self.week}) == 0:
+            print('Training Current Week')
+            self.train_week()
 
-    def train(self, store = True):
-        """
-        Compute team weekly attack, defence and home advantage parameters
-        """
+        # Get all abilities in DF
+        self.abilities = datasets.team_abilities(mw, att_constraint, def_constraint)
 
-        # Datasets
-        start_df = datasets.game_results([2013, 2014, 2015], self.teams)
-        rest_df = datasets.game_results([2016, 2017, 2018, 2019], self.teams)
+    def train_all(self, store = True):
+
+        # Get all week numbers from 2015 season
+        first_week = datasets.game_results(2015)['week'].min()
+
+        # Generate abilities for each week
+        for w in range(first_week, self.week + 1):
+            self.train_week(w)
+
+
+    def train_week(self, week = None):
+
+        # If week is None, then use the current week
+        if week is None:
+            week = self.week
+
+        # Get all games in DB before given week
+        df = datasets.game_results(teams = self.teams, week = week)
+
+        # Remove abilities from DB
+        self.mongo.remove('dixon_team', {'mw': self.mw, 'att_constraint': self.att_constraint, 'def_constraint': self.def_constraint, 'week': week})
 
         # Initial Guess
         a0 = pu.initial_guess(0, self.nteams)
 
-        abilities = []
+        if self.att_constraint == 'rolling':
+            weight = np.exp(-self.mw * (week - start_df['week']))
+            att_constraint = np.average(np.append(start_df['home_pts'], start_df['away_pts']), weights = np.append(weight, weight))
+        else:
+            att_constraint = self.att_constraint
 
-        # Recalculate the Dixon Coles parameters every week after adding the previous week to the dataset
-        for week, stats in rest_df.groupby('week'):
+        con = []
 
-            stats = rest_df[rest_df.week == 303]
-            if self.att_constraint == 'rolling':
-                weight = np.exp(-self.mw * (week - start_df['week']))
-                att_constraint = np.average(np.append(start_df['home_pts'], start_df['away_pts']), weights = np.append(weight, weight))
-            else:
-                att_constraint = self.att_constraint
+        if self.att_constraint is not None:
+            con.append({'type': 'eq', 'fun': pu.attack_constraint, 'args': (round(att_constraint), self.nteams,)})
 
-            con = []
+        if self.def_constraint is not None:
+            con.append({'type': 'eq', 'fun': pu.defense_constraint, 'args': (round(self.def_constraint), self.nteams,)})
 
-            if self.att_constraint is not None:
-                con.append({'type': 'eq', 'fun': pu.attack_constraint, 'args': (round(att_constraint), self.nteams,)})
+        # Get team parameters for the current week
+        opt = minimize(nba.dixon_coles, x0=a0, args=(df, self.nteams, week, self.mw), constraints = [], method='SLSQP')
 
-            if self.def_constraint is not None:
-                con.append({'type': 'eq', 'fun': pu.defense_constraint, 'args': (round(self.def_constraint), self.nteams,)})
+        abilities = pu.convert_abilities(opt.x, 0, self.teams)
 
-            # Get team parameters for the current week
-            opt = minimize(nba.dixon_coles, x0=a0, args=(start_df, self.nteams, week, self.mw), constraints = [], method='SLSQP')
+        # Store weekly abilities
+        abilities['week'] = int(week)
+        abilities['mw'] = self.mw
 
-            abilities = pu.convert_abilities(opt.x, 0, self.teams)
+        # Constraints
+        abilities['att_constraint'] = self.att_constraint
+        abilities['def_constraint'] = self.def_constraint
 
-            # Store weekly abilities
-            abilities['week'] = int(week)
-            abilities['mw'] = self.mw
-
-            # Constraints
-            abilities['att_constraint'] = self.att_constraint
-            abilities['def_constraint'] = self.def_constraint
-
-            self.mongo.insert('dixon_team', abilities)
-
-            # Append this week to the database
-            start_df = start_df.append(stats, ignore_index=True)
+        self.mongo.insert('dixon_team', abilities)
 
 
-    def predict(self, dataset = None, seasons = None):
+
+    def predict(self, dataset = None, seasons = None, keep_abilities = False):
         """
         Game predictions based on the team.
         """
@@ -130,7 +145,8 @@ class nba_model:
         aprob = aprob * scale
 
         # Drop columns we don't want
-        games = games.drop(['home_attack', 'home_defence', 'home_adv', 'away_attack', 'away_defence', 'home_mean', 'away_mean'], axis = 1)
+        if not keep_abilities:
+            games = games.drop(['home_attack', 'home_defence', 'home_adv', 'away_attack', 'away_defence', 'home_mean', 'away_mean'], axis = 1)
 
         # Add probabilities to DF
         games['hprob'] = hprob
@@ -138,11 +154,11 @@ class nba_model:
 
         # Try to sort by date, but if date doesn't exist it doesn't matter
         try:
-            games = games.sort_values('date')
+            games = games.sort_values('date').reset_index()
         except KeyError:
             pass
 
-        return games
+        return games.reset_index()
 
 
     def games_to_bet(self,
@@ -196,19 +212,19 @@ class nba_model:
 
     def today_games(self,
                     sportsbooks = ['Pinnacle Sports', 'bet365', 'SportsInteraction'],
-                    week = 464,
-                    bets_only = True):
+                    bets_only = True,
+                    keep_abilities = False):
 
-        today = team_scraper.scrape_betting_page()
+        today = team_scraper.scrape_betting_page().reset_index(drop=True)
 
         # Filter for the sportsbooks
         if sportsbooks is not None:
             today = today[today.sportsbook.isin(sportsbooks)]
 
         # TODO: Dynamic method to include the current week vs. hardcode
-        today['week'] = week
+        today['week'] = self.week
 
-        predictions = self.predict(today)
+        predictions = self.predict(today, keep_abilities = keep_abilities)
         bets = self.games_to_bet(predictions, return_bets_only = bets_only)
 
         return bets
@@ -218,30 +234,8 @@ class nba_model:
         if predictions is None:
             predictions = self.predict()
 
-        def win_accuracy(group):
-            home_correct = sum((group.home_pts > group.away_pts) & (group.hprob > group.aprob))
-            away_correct = sum((group.away_pts > group.home_pts) & (group.aprob > group.hprob))
-
-            return (home_correct + away_correct)/len(group)
-
-        return predictions.groupby('season').apply(win_accuracy)
-
-
-    def accuracy_by_season_home_away(self, predictions = None):
-
-        if predictions is None:
-            predictions = self.predict()
-
-        def home_accuracy(group):
-            home_correct = sum((group.home_pts > group.away_pts) & (group.hprob > group.aprob))
-            num_guesses = sum(group.hprob > group.aprob)
-
-            return home_correct/num_guesses
-
-        def away_accuracy(group):
-            home_correct = sum((group.away_pts > group.home_pts) & (group.aprob > group.hprob))
-            num_guesses = sum(group.aprob > group.hprob)
-
-            return home_correct/num_guesses
-
-        return predictions.groupby(['season']).apply(lambda x: pd.Series({'home': home_accuracy(x), 'away': away_accuracy(x)}))
+        return predictions.groupby(['season']).apply(lambda x: pd.Series({'home_percentage': pu.home_accuracy(x),
+                                                                          'home_count': sum(x.hprob > x.aprob),
+                                                                          'away_percentage': pu.away_accuracy(x),
+                                                                          'away_count': sum(x.aprob > x.hprob),
+                                                                          'total_percentage': pu.win_accuracy(x)}))

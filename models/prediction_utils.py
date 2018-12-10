@@ -99,3 +99,23 @@ def convert_abilities(opt, model, teams):
         i += 1
 
     return abilities
+
+
+def home_accuracy(group):
+    home_correct = sum((group.home_pts > group.away_pts) & (group.hprob > group.aprob))
+    num_guesses = sum(group.hprob > group.aprob)
+
+    return home_correct/num_guesses
+
+def away_accuracy(group):
+    home_correct = sum((group.away_pts > group.home_pts) & (group.aprob > group.hprob))
+    num_guesses = sum(group.aprob > group.hprob)
+
+    return home_correct/num_guesses
+
+
+def win_accuracy(group):
+    home_correct = sum((group.home_pts > group.away_pts) & (group.hprob > group.aprob))
+    away_correct = sum((group.away_pts > group.home_pts) & (group.aprob > group.hprob))
+
+    return (home_correct + away_correct)/len(group)

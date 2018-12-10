@@ -220,7 +220,7 @@ def team_season_stats(team):
         # Add to MongoDB
         m.insert('team_season', season)
 
-def scrape_betting_page(url = 'https://classic.sportsbookreview.com/betting-odds/nba-basketball/money-line/', sel_browser = None, insert = False):
+def scrape_betting_page(url = 'https://classic.sportsbookreview.com/betting-odds/nba-basketball/money-line/', sel_browser = None, mongo_driver = None, game_date = None):
 
     team_names = scrape_utils.team_names()
 
@@ -235,9 +235,14 @@ def scrape_betting_page(url = 'https://classic.sportsbookreview.com/betting-odds
 
     if sel_browser is None:
         browser = webdriver.Chrome('chromedriver')
+    else:
+        browser = sel_browser
 
     browser.get(url)
     time.sleep(5)
+
+    # Stop the page from loading
+    browser.execute_script("window.stop()");
 
     # Sportsbooks
     sb = browser.find_elements_by_id('bookName')
@@ -325,9 +330,9 @@ def scrape_betting_page(url = 'https://classic.sportsbookreview.com/betting-odds
 
 
 
-            if insert:
+            if mongo_driver is not None:
                 sportsbook_odds = {'sportsbooks': [{'sportsbook': sb, 'home_odds':ho, 'away_odds': ao} for sb, ho, ao in zip(sportsbooks, home_odds, away_odds)]}
-                query = m.update('game_log', {'date': game_date, 'home.team': home_team, 'away.team': away_team}, {'$set': {'odds': sportsbook_odds}})
+                query = mongo_driver.update('game_log', {'date': game_date, 'home.team': home_team, 'away.team': away_team}, {'$set': {'odds': sportsbook_odds}})
             else:
 
                 sportsbook_odds = [{'sportsbook': sb, 'home_odds': ho, 'away_odds': ao, 'home_team': home_team, 'away_team': away_team} for sb, ho, ao in zip(sportsbooks, home_odds, away_odds)]
@@ -339,7 +344,7 @@ def scrape_betting_page(url = 'https://classic.sportsbookreview.com/betting-odds
     if sel_browser is None:
         browser.close()
 
-    if not insert:
+    if mongo_driver is None:
         return pd.DataFrame(sportsbooks_games)
 
 
@@ -357,12 +362,14 @@ def betting_lines(year):
     # Webapges are by dates
     all_dates = m.find('game_log', {'season': year}, {'_id': 0, 'date': 1}).distinct('date')
 
+    browser = webdriver.Chrome('chromedriver')
+
     # Iterate through each date in a season
     for game_date in all_dates:
 
         # Get URL
         url = 'https://classic.sportsbookreview.com/betting-odds/nba-basketball/money-line/?date=' + datetime.strftime(game_date, '%Y%m%d')
 
-        scrape_betting_page(url, browser, True)
+        scrape_betting_page(url, browser, m, game_date)
 
     browser.close()

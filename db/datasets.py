@@ -6,7 +6,7 @@ import numpy as np
 from db import process_utils, mongo
 
 
-def game_results(season, teams = None):
+def game_results(season = None, teams = None, week = None):
     """
     Create a Pandas DataFrame that contains game results.
 
@@ -23,7 +23,11 @@ def game_results(season, teams = None):
     if season is not None:
         if isinstance(season, int):
             season = [season]
-        season_match = {'season': {'$in': season}}
+        season_match['season'] = {'$in': season}
+
+    week_match = {}
+    if week is not None:
+        week_match['week'] = {'$lt': week}
 
     pipeline = [
         {'$match': season_match},
@@ -35,7 +39,8 @@ def game_results(season, teams = None):
             'week': {'$add': [{'$week': '$date'}, {'$multiply': [{'$mod': [{'$year': '$date'}, 2010]}, 52]}]},
             'season': 1,
             'date': 1
-        }}
+        }},
+        {'$match': week_match}
 
     ]
     # Could aggregate
