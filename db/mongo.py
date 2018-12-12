@@ -2,10 +2,15 @@ from pymongo import MongoClient
 from pymongo import errors
 
 
+
+
 class Mongo:
     """
     This class is a wrapper for pymongo.  Allows easier use for different collections.
     """
+
+    DIXON_TEAM = 'dixon_team'
+    GAME_LOG = 'game_log'
 
     def __init__(self):
         self.client = MongoClient()

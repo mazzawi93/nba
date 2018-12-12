@@ -78,7 +78,7 @@ def initial_guess(model, nteams):
     return np.append(teams, params)
 
 
-def convert_abilities(opt, model, teams):
+def convert_abilities(opt, teams):
     """
     Convert the numpy abilities array into a more usable dict
     :param teams: Team names

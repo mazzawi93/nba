@@ -44,7 +44,7 @@ def game_results(season = None, teams = None, week = None):
 
     ]
     # Could aggregate
-    cursor = m.aggregate('game_log', pipeline)
+    cursor = m.aggregate(m.GAME_LOG, pipeline)
 
     df = pd.DataFrame(list(cursor))
 
@@ -101,7 +101,7 @@ def betting_df(season = None, sportsbooks = None):
         {'$match': sportsbook_match}
     ]
 
-    cursor = m.aggregate('game_log', pipeline)
+    cursor = m.aggregate(m.GAME_LOG, pipeline)
 
     df = pd.DataFrame(list(cursor))
 
@@ -118,7 +118,7 @@ def team_abilities(mw, att_constraint, def_constraint):
     """
 
     m = mongo.Mongo()
-    query = m.find('dixon_team',
+    query = m.find(m.DIXON_TEAM,
                    {'mw': mw, 'att_constraint': att_constraint, 'def_constraint': def_constraint},
                    {'_id': 0, 'model': 0, 'mw':0, 'att_constraint': 0, 'def_constraint': 0})
 

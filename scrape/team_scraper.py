@@ -17,6 +17,44 @@ full_teams = ['Atlanta Hawks', 'Boston Celtics', 'Brooklyn Nets', 'Charlotte Hor
               'Washington Wizards']
 
 
+def scrape_all():
+    """ Scrape all the information from basketball-reference and oddsportal for betting odds."""
+
+    # Scrape team information by season
+    for team in scrape_utils.team_names():
+        team_season_stats(team)
+        # Each season
+        print(team)
+        for year in range(2019, 2020):
+            # Game Logs
+            season_game_logs(team, year)
+
+            # Starting Lineups
+            #player_scraper.get_starting_lineups(team, year)
+
+    # Init mongo to get game IDS for box score scraping
+    m = mongo.Mongo()
+
+    # Game Information (Box Score and Play by Play)
+    for year in range(2015, 2020):
+        player_scraper.get_starting_lineups(year)
+        for game in m.find('game_log', {'season': year}, {'_id': 1}):
+            #team_scraper.play_by_play(game['_id'])
+            player_scraper.player_box_score(game['_id'])
+
+            print(game['_id'])
+
+
+
+    # Get player information
+    for player in scrape_utils.get_active_players():
+        print(player)
+        player_scraper.player_per_game(player)
+
+    # Get betting lines (By Year) need from 2014
+    for year in range(2015, 2020):
+        team_scraper.betting_lines(2019)
+
 def season_game_logs(team, year):
     """
     Scrape Basketball-Reference for every game log in a given team's season and store it in MongoDB.
@@ -220,7 +258,7 @@ def team_season_stats(team):
         # Add to MongoDB
         m.insert('team_season', season)
 
-def scrape_betting_page(url = 'https://classic.sportsbookreview.com/betting-odds/nba-basketball/money-line/', sel_browser = None, mongo_driver = None, game_date = None):
+def scrape_betting_page(url, sel_browser = None, mongo_driver = None, game_date = None):
 
     team_names = scrape_utils.team_names()
 
