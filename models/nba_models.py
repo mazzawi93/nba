@@ -1,53 +1,32 @@
+""" This module contains functions to model basketball teams. """
+
 import numpy as np
-from scipy.optimize import minimize
-from scipy.stats import poisson, beta
-from models import prediction_utils as pu
-
-from db import mongo, process_utils, datasets
-import pandas as pd
+from scipy.stats import poisson
 
 
-def dixon_coles(params, games, nteams, week, mw):
+def dixon_coles(params, games, nteams, week, decay):
     """
     This is the likelihood function for the Dixon Coles model adapted for basketball.
 
-    :param mw: Time decay factor (Bigger number results in higher weighting for recent matches)
-    :param week: Current week of the simulation
-    :param nteams: Number of teams in dataset
-    :param params: Dixon-Coles Model Parameters
-    :param games: DataFrame of games
-    :return: Log Likelihood from the Dixon-Coles Model
+    Args:
+        params: Dixon-Coles model parameters
+        games: DataFrame of historical results
+        nteams: Number of teams in dataset
+        week: Current week of the simulation
+        decay: Time decay factor (Bigger number results in higher weighting for recent matches)
+
+    Returns:
+        The Log Likelihood from the Dixon-Coles Model with the passed set of parameters
     """
 
-    hmean = params[games['home_team']] * params[games['away_team'] + nteams] * params[games['home_team'] + nteams + nteams]
-    amean = params[games['away_team']] * params[games['home_team'] + nteams]
+    hmean = params[games['home_team']] \
+            * params[games['away_team'] + nteams] \
+            * params[games['home_team'] + nteams + nteams]
+
+    amean = params[games['away_team']] \
+            * params[games['home_team'] + nteams]
 
     likelihood = poisson.logpmf(games['home_pts'], hmean) + poisson.logpmf(games['away_pts'], amean)
-    weight = np.exp(-mw * (week - games['week']))
-
-    return -np.dot(likelihood, weight)
-
-
-def player_beta(params, pts, tpts, weeks, week_num, mw):
-    """
-    Likelihood function to determine player beta distribution parameters
-
-    :return: Likelihood
-    """
-    likelihood = beta.logpdf(pts / tpts, params[0], params[1])
-    weight = np.exp(-mw * (week_num - weeks))
-
-    return -np.dot(likelihood, weight)
-
-
-def player_poisson(params, pts, weeks, week_num, mw):
-    """
-    Likelihood function to determine player poisson parameters
-
-    :return: Likelihood
-    """
-
-    likelihood = poisson.logpmf(pts, params[0])
-    weight = np.exp(-mw * (week_num - weeks))
+    weight = np.exp(-decay * (week - games['week']))
 
     return -np.dot(likelihood, weight)
