@@ -26,8 +26,8 @@ class nba_model:
         self.def_constraint = def_constraint
 
         # Set to the current week
-        today = datetime.datetime.now()
-        self.week = int(today.strftime("%U")) +  (today.year % 2010 * 52)
+        self.today = datetime.datetime.now()
+        self.week = int(self.today.strftime("%U")) +  (self.today.year % 2010 * 52)
 
         # Train new abilities if they don't exist in the database
         if self.mongo.count(self.mongo.DIXON_TEAM, {'mw': self.mw, 'att_constraint': self.att_constraint, 'def_constraint': self.def_constraint}) == 0:
@@ -43,13 +43,12 @@ class nba_model:
 
     def train_all(self):
 
-        # Get all week numbers from 2015 season
-        first_week = datasets.game_results(2015)['week'].min()
+        weeks = datasets.game_results([2015, 2016, 2017, 2018, 2019])['week'].unique()
 
         # Generate abilities for each week
         # TODO: Don't do range as it does all weeks in the offseason
-        for w in range(first_week, self.week + 1):
-            self.train_week(w)
+        for w in weeks:
+            self.train_week(int(w))
 
 
     def train_week(self, week = None):
@@ -75,6 +74,10 @@ class nba_model:
 
         con = []
 
+        print(week, att_constraint)
+
+        np.exp(-0.044 * np.arange(1, 100))
+
         if self.att_constraint is not None:
             con.append({'type': 'eq', 'fun': pu.attack_constraint, 'args': (round(att_constraint), self.nteams,)})
 
@@ -97,7 +100,7 @@ class nba_model:
         self.mongo.insert(self.mongo.DIXON_TEAM, abilities)
 
 
-    def predict(self, dataset = None, seasons = None, keep_abilities = False):
+    def predict(self, dataset = None, seasons = None, keep_abilities = False, sample = False):
         """
         Game predictions based on the team.
         """
@@ -124,22 +127,33 @@ class nba_model:
         games['home_mean'] = games['home_attack'] * games['away_defence'] * games['home_adv']
         games['away_mean'] = games['away_attack'] * games['home_defence']
 
-        # Win probabilities
-        hprob = np.zeros(len(games))
-        aprob = np.zeros(len(games))
+        if sample:
 
-        # Iterate through each game to determine the winner and prediction
-        for row in games.itertuples():
-            hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.home_mean, row.away_mean)
+            games[['hprob', 'aprob']] = games.apply(pu.determine_probabilities_sample, axis = 1)
 
-        # Scale odds so they sum up to 1
-        scale = 1 / (hprob + aprob)
-        hprob = hprob * scale
-        aprob = aprob * scale
+            scale = 1 / (games['hprob'] + games['aprob'])
 
-        # Add probabilities to DF
-        games['hprob'] = hprob
-        games['aprob'] = aprob
+            games['hprob'] = games['hprob'] * scale
+            games['aprob'] = games['aprob'] * scale
+
+        else:
+
+            # Win probabilities
+            hprob = np.zeros(len(games))
+            aprob = np.zeros(len(games))
+
+            # Iterate through each game to determine the winner and prediction
+            for row in games.itertuples():
+                hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.home_mean, row.away_mean)
+
+            # Scale odds so they sum up to 1
+            scale = 1 / (hprob + aprob)
+            hprob = hprob * scale
+            aprob = aprob * scale
+
+            # Add probabilities to DF
+            games['hprob'] = hprob
+            games['aprob'] = aprob
 
         # Drop columns we don't want
         if not keep_abilities:
@@ -175,7 +189,7 @@ class nba_model:
         else:
             games_df = predictions
 
-        if kwargs.get('R_percent', True):
+        if kwargs.get('R_percent', False):
             # Get the R value for each game based on the abilities
             hbp = 1/games_df['home_odds']
             abp = 1/games_df['away_odds']
@@ -210,7 +224,7 @@ class nba_model:
                     sportsbooks = ['Pinnacle Sports', 'bet365', 'SportsInteraction'],
                     bets_only = True,
                     keep_abilities = False,
-                    R_percent = True):
+                    R_percent = False):
 
 
 
@@ -242,125 +256,62 @@ class nba_model:
                                                                           's': np.dot(np.log(x.hprob), x.home_pts > x.away_pts) + np.dot(np.log(x.aprob), x.away_pts > x.home_pts)}))
 
 
-    def betting_accuracy(self, predictions, **kwargs):
+    def betting_profit(self, predictions, df = None, **kwargs):
 
         betting = self.games_to_bet(predictions, sportsbooks = kwargs.get('sportsbooks', None), R_percent = kwargs.get('R_percent', True))
 
-        writer = pd.ExcelWriter(kwargs.get('file_name', 'betting.xlsx'))
+        # Years to bet
+        years = kwargs.get('years', [[2019], [2018, 2019], [2017, 2018, 2019]])
 
-        # Optimal Betting Strategy
-        fluc_allowance = kwargs.get('fluc_allowance', 1.5)
-        risk_tolerance = kwargs.get('risk_tolerance', 10)
-        starting_bankroll = kwargs.get('starting_bankroll', 2000)
-
-        low_r = kwargs.get('low_r', 1)
-        high_r = kwargs.get('high_r', 1)
-
-        r = np.arange(low_r, high_r, 0.05)
-
-        # Create sheet for each year
-        for year, games in betting.groupby('season'):
-
+        # Create a new DF if not appending to an old one
+        if df is None:
             df = pd.DataFrame()
 
-            # R lower limit
+        # Iterate trough each year and append to DF
+        for n in years:
+
+            # Games in the defined season
+            games = betting[betting.season.isin(n)]
+
+            # Simulate season
+            df = pu.bet_season(games, kwargs.get('low_r', 1.55), kwargs.get('high_r', 2.7), **kwargs)
+
+        return df
+
+
+    def betting_ranges(self, predictions, **kwargs):
+
+        # Get R values for predictions
+        betting = self.games_to_bet(predictions,
+                                    sportsbooks = kwargs.get('sportsbooks', ['SportsInteraction', 'Pinnacle Sports', 'bet365']),
+                                    R_percent = kwargs.get('R_percent', False))
+
+        # Excel Writer
+        writer = pd.ExcelWriter(kwargs.get('file_name', 'betting.xlsx'))
+
+        # R ranges
+        low_r = kwargs.get('low_r', 1)
+        high_r = kwargs.get('high_r', 3)
+
+        r = np.arange(low_r, 2.15, 0.05)
+
+        # Seasons to bet
+        years = kwargs.get('years', [[2019], [2018, 2019], [2017, 2018, 2019]])
+
+        # Create sheet for each year
+        for n in years:
+
+            games = betting[betting.season.isin(n)]
+
+            # Simulate the bets for each range
             for lr in r:
+                for hr in np.arange(lr+0.05, high_r+0.05, 0.05):
 
-                lr = round(lr, 2)
+                    season_df = pd.DataFrame(games, lr, hr, **kwargs)
+                    df = df.append(season_df, index = False)
 
-                # R upper limit
-                for hr in np.arange(lr+0.05, high_r, 0.05):
+                # Write the season to excel
+                df.to_excel(writer, '-'.join(str(e) for e in n), index = False)
 
-                    hr = round(hr, 2)
-
-                    stats = {'low_r': lr, 'high_r': hr}
-
-                    # Bet Total
-                    stats['home_total'] = 0
-                    stats['away_total'] = 0
-
-                    # Games Bet
-                    stats['home_count'] = 0
-                    stats['away_count'] = 0
-
-                    # Bet Revenue
-                    stats['home_revenue'] = 0
-                    stats['away_revenue'] = 0
-
-                    bankroll = starting_bankroll
-
-                    for game_id, game in games.groupby('_id'):
-
-                        # Bet on home team when it fits the R value
-                        home_bet = np.logical_and(game.home_R < hr, game.home_R >= lr)
-
-                        # Bet on away team when it fits the R value
-                        away_bet = np.logical_and(game.away_R < hr, game.away_R >= lr)
-
-                        if kwargs.get('any', True):
-                            hbet = home_bet.any()
-                            abet = away_bet.any()
-                        else:
-                            hbet = home_bet.all()
-                            abet = away_bet.all()
-
-                        if hbet:
-
-                            home_amount = 1/(game.home_odds.max() * fluc_allowance * risk_tolerance) * bankroll
-                            bankroll = bankroll - home_amount
-
-                            # Home stats
-                            stats['home_total'] += home_amount
-                            stats['home_count'] += 1
-
-
-                        if abet:
-
-                            away_amount = 1/(game.away_odds.max() * fluc_allowance * risk_tolerance) * bankroll
-                            bankroll = bankroll - away_amount
-
-                            # Away stats
-                            stats['away_total'] += away_amount
-                            stats['away_count'] += 1
-
-                        if hbet:
-                            if((game.home_pts > game.away_pts).any()):
-                                bankroll = bankroll + (home_amount * game.home_odds.max())
-                                stats['home_revenue'] += (home_amount * game.home_odds.max())
-
-                        if abet:
-                            if((game.away_pts > game.home_pts).any()):
-                                bankroll = bankroll + (away_amount * game.away_odds.max())
-                                stats['away_revenue'] += (away_amount * game.away_odds.max())
-
-                    stats['home_profit'] = stats['home_revenue'] - stats['home_total']
-                    stats['away_profit'] = stats['away_revenue'] - stats['away_total']
-
-                    stats['bet_total'] = stats['home_total'] + stats['away_total']
-                    stats['profit'] = bankroll - starting_bankroll
-
-                    try:
-                        stats['home_rob'] = ((stats['home_revenue'] - stats['home_total'])/stats['home_total'] * 100)
-                    except ZeroDivisionError:
-                        stats['home_rob'] = 0
-
-                    try:
-                        stats['away_rob'] = ((stats['away_revenue'] - stats['away_total'])/stats['away_total'] * 100)
-                    except ZeroDivisionError:
-                        stats['away_rob'] = 0
-
-                    try:
-                        stats['roi'] = ((bankroll - starting_bankroll)/starting_bankroll * 100)
-                    except ZeroDivisionError:
-                        stats['roi'] = 0
-
-                    try:
-                        stats['rob'] = ((bankroll - starting_bankroll)/stats['bet_total'] * 100)
-                    except ZeroDivisionError:
-                        stats['rob'] = 0
-
-                    df = df.append(pd.DataFrame(stats, index = [0]), ignore_index = True)
-
-                df.to_excel(writer, str(year), index = False)
-
+        # Save the excel file
         writer.save()
