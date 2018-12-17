@@ -2,8 +2,6 @@ import string
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
 
 
 def team_names():
@@ -114,14 +112,11 @@ def determine_home_win(location, result):
     if location is 0:
         if result == 'W':
             return 1
-        else:
-            return -1
     else:
         if result == 'L':
             return 1
-        else:
-            return -1
 
+    return -1
 
 def field_goal_update(player, stat, play, make):
     """
@@ -210,7 +205,6 @@ def stat_parse(stat_name, stat):
             return int(stat)
         elif stat[0] == '.' or stat.string[1] == '.':
             return float(stat)
-
         else:
             return stat
     except TypeError:

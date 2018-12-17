@@ -1,9 +1,9 @@
-import re, requests
-
+from datetime import datetime
+import re
+import requests
 from bs4 import BeautifulSoup
 from db import mongo
 from scrape import scrape_utils
-from datetime import datetime
 
 
 def get_starting_lineups(team, year):
@@ -15,7 +15,7 @@ def get_starting_lineups(team, year):
     """
 
     # MongoDB
-    m = mongo.Mongo()
+    mongo_wrapper = mongo.Mongo()
 
     # Rename team if relocated
     team = scrape_utils.rename_team(team, year)
@@ -23,10 +23,10 @@ def get_starting_lineups(team, year):
     # Starting Lineup URL
     url = "http://www.basketball-reference.com/teams/%s/%s_start.html" % (team, year)
 
-    r = requests.get(url)
-    r.raise_for_status()
+    response = requests.get(url)
+    response.raise_for_status()
 
-    soup = BeautifulSoup(r.content, "html.parser")
+    soup = BeautifulSoup(response.content, "html.parser")
 
     team = scrape_utils.rename_team(team)
 
@@ -62,19 +62,21 @@ def get_starting_lineups(team, year):
             lineup.append(player['href'].rsplit('/', 1)[-1].rsplit('.', 1)[0])
 
         # Update document
-        m.update('game_log', {'date': date, 'home.team': home, 'away.team': away}, {'$set': {key: lineup}})
+        mongo_wrapper.update('game_log',
+                             {'date': date, 'home.team': home, 'away.team': away},
+                             {'$set': {key: lineup}})
 
 
 def player_per_game(player):
     """ Scrape a player's yearly per game stats"""
 
     # Mongo
-    m= mongo.Mongo()
+    mongo_wrapper = mongo.Mongo()
 
     # Request
     url = "http://www.basketball-reference.com" + player['url']
-    r = requests.get(url)
-    soup = BeautifulSoup(r.content, "html.parser")
+    response = requests.get(url)
+    soup = BeautifulSoup(response.content, "html.parser")
 
     # Player's statistics
     per_game = soup.find(id="per_game").find('tbody')
@@ -91,7 +93,7 @@ def player_per_game(player):
 
     # These entries are defined in the per game and advanced tables
     # Only want them to be displayed once per season for a player
-    entries = ['age', 'team_id', 'lg_id', 'pos', 'g', 'gs', 'mp']
+    #entries = ['age', 'team_id', 'lg_id', 'pos', 'g', 'gs', 'mp']
 
     # Iterate through the years
     for year in per_game.find_all('tr', {'id': regex}):
@@ -113,7 +115,7 @@ def player_per_game(player):
 
         player_stats['seasons'].append(season)
 
-    m.insert('player_season', player_stats)
+    mongo_wrapper.insert('player_season', player_stats)
 
 
 def player_box_score(game_id):
@@ -124,11 +126,11 @@ def player_box_score(game_id):
     """
 
     # HTML Content
-    r = requests.get('https://www.basketball-reference.com/boxscores/' + game_id + '.html')
-    soup = BeautifulSoup(r.content, "html.parser")
+    response = requests.get('https://www.basketball-reference.com/boxscores/' + game_id + '.html')
+    soup = BeautifulSoup(response.content, "html.parser")
 
     # MongoDB Collection
-    m = mongo.Mongo()
+    mongo_wrapper = mongo.Mongo()
 
     # The ids of the tables have team names in them
     table_id = re.compile('^box_[a-z]{3}_basic$')
@@ -153,7 +155,7 @@ def player_box_score(game_id):
 
             # Loop through each stat
             for stat in player.find_all('td'):
-                player_stats[stat['data-stat']] = scrape_utils.stat_parse(stat['data-stat'], stat.string)
+                player_stats[stat['data-stat']] = scrape_utils.stat_parse(stat['data-stat'], stat.string) # pylint: disable=line-too-long
 
             # If this key exists it means the player did not play
             if 'reason' not in player_stats:
@@ -166,4 +168,6 @@ def player_box_score(game_id):
         home = True
 
     # Insert into database
-    m.update('game_log', {'_id': game_id}, {'$set': {'hplayers': home_players, 'aplayers': away_players}})
+    mongo_wrapper.update('game_log',
+                         {'_id': game_id},
+                         {'$set': {'hplayers': home_players, 'aplayers': away_players}})

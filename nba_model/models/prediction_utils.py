@@ -130,19 +130,19 @@ def win_accuracy(group):
     return (home_correct + away_correct)/len(group)
 
 
-def bet_season(games, low_r, high_r, **kwargs):
+def bet_season(games, lr, hr, **kwargs):
 
     # Optimal Betting Strategy
     fluc_allowance = kwargs.get('fluc_allowance', 1.5)
     risk_tolerance = kwargs.get('risk_tolerance', 10)
     starting_bankroll = kwargs.get('starting_bankroll', 2000)
 
-    lr = round(low_r, 2)
+    lr = round(lr, 2)
 
     # R upper limit
-    hr = round(high_r, 2)
+    hr = round(hr, 2)
 
-    stats = {'season': '-'.join(str(e) for e in n), 'low_r': lr, 'high_r': hr}
+    stats = {'low_r': lr, 'high_r': hr}
 
     # Bet Total
     stats['home_total'] = 0
@@ -167,11 +167,11 @@ def bet_season(games, low_r, high_r, **kwargs):
     for game_id, game in games.groupby('_id'):
 
         if kwargs.get('any', True):
-            hbet = home_bet.any()
-            abet = away_bet.any()
+            hbet = game.home_bet.any()
+            abet = game.away_bet.any()
         else:
-            hbet = home_bet.all()
-            abet = away_bet.all()
+            hbet = game.home_bet.all()
+            abet = game.away_bet.all()
 
         if hbet:
 

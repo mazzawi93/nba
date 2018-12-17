@@ -42,6 +42,10 @@ class nba_model:
         self.abilities = datasets.team_abilities(mw, att_constraint, def_constraint)
 
     def train_all(self):
+        """
+        Train parameters for all weeks.
+
+        """
 
         weeks = datasets.game_results([2015, 2016, 2017, 2018, 2019])['week'].unique()
 
@@ -52,6 +56,11 @@ class nba_model:
 
 
     def train_week(self, week = None):
+        """ Train a specific week to get team abilities.
+
+        Args:
+
+        """
 
         # If week is None, then use the current week
         if week is None:
@@ -59,6 +68,9 @@ class nba_model:
 
         # Get all games in DB before given week
         df = datasets.game_results(teams = self.teams, week = week)
+
+        # Only keep the last 52 weeks
+        #df = df[df.week >= (week-52)]
 
         # Remove abilities from DB
         self.mongo.remove(self.mongo.DIXON_TEAM, {'mw': self.mw, 'att_constraint': self.att_constraint, 'def_constraint': self.def_constraint, 'week': week})
@@ -178,8 +190,7 @@ class nba_model:
         high_R
         """
 
-        home_low_R = kwargs.get('home_low_R', 1.55)
-        away_low_R = kwargs.get('away_low_R', 1)
+        low_R = kwargs.get('low_R', 1.55)
         high_R = kwargs.get('high_R', 2.05)
 
         # Retreive the odds and merge them with the game predictions
@@ -215,7 +226,7 @@ class nba_model:
         games_df['away_R'] = np.floor(games_df['away_R'] * 100) / 100
 
         if kwargs.get('return_bets_only', False):
-            return games_df[(((games_df.home_R >= home_low_R) & (games_df.home_R <= high_R)) | ((games_df.away_R >= away_low_R) & (games_df.away_R < high_R)))]
+            return games_df[(((games_df.home_R >= low_R) & (games_df.home_R <= high_R)) | ((games_df.away_R >= low_R) & (games_df.away_R < high_R)))]
         else:
             return games_df
 
@@ -257,8 +268,15 @@ class nba_model:
 
 
     def betting_profit(self, predictions, df = None, **kwargs):
+        """
+        Args:
 
-        betting = self.games_to_bet(predictions, sportsbooks = kwargs.get('sportsbooks', None), R_percent = kwargs.get('R_percent', True))
+
+        """
+
+        betting = self.games_to_bet(predictions,
+                                    sportsbooks = kwargs.get('sportsbooks', None),
+                                    R_percent = kwargs.get('R_percent', False))
 
         # Years to bet
         years = kwargs.get('years', [[2019], [2018, 2019], [2017, 2018, 2019]])
@@ -281,6 +299,7 @@ class nba_model:
 
     def betting_ranges(self, predictions, **kwargs):
 
+
         # Get R values for predictions
         betting = self.games_to_bet(predictions,
                                     sportsbooks = kwargs.get('sportsbooks', ['SportsInteraction', 'Pinnacle Sports', 'bet365']),
@@ -298,17 +317,20 @@ class nba_model:
         # Seasons to bet
         years = kwargs.get('years', [[2019], [2018, 2019], [2017, 2018, 2019]])
 
+
         # Create sheet for each year
         for n in years:
 
             games = betting[betting.season.isin(n)]
 
+            df = pd.DataFrame()
+
             # Simulate the bets for each range
             for lr in r:
                 for hr in np.arange(lr+0.05, high_r+0.05, 0.05):
 
-                    season_df = pd.DataFrame(games, lr, hr, **kwargs)
-                    df = df.append(season_df, index = False)
+                    season_df = pd.DataFrame(pu.bet_season(games, lr, hr, **kwargs))
+                    df = df.append(season_df, ignore_index = True)
 
                 # Write the season to excel
                 df.to_excel(writer, '-'.join(str(e) for e in n), index = False)

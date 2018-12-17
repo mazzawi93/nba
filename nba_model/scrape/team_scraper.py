@@ -1,5 +1,7 @@
-import re, requests, time
 from datetime import datetime
+import re
+import requests
+import time
 from bs4 import BeautifulSoup
 import pandas as pd
 from selenium import webdriver
@@ -258,18 +260,18 @@ def team_season_stats(team):
         # Add to MongoDB
         m.insert('team_season', season)
 
-def scrape_betting_page(url, sel_browser = None, mongo_driver = None, game_date = None):
+def scrape_betting_page(url, sel_browser=None, mongo_driver=None, game_date=None):
 
     team_names = scrape_utils.team_names()
 
     full_teams = ['Atlanta', 'Boston', 'Brooklyn', 'Charlotte', 'Chicago',
-              'Cleveland', 'Dallas', 'Denver', 'Detroit',
-              'Golden State', 'Houston', 'Indiana', 'L.A. Clippers',
-              'L.A. Lakers', 'Memphis', 'Miami', 'Milwaukee',
-              'Minnesota', 'New Orleans', 'New York', 'Oklahoma City',
-              'Orlando', 'Philadelphia', 'Phoenix', 'Portland',
-              'Sacramento', 'San Antonio', 'Toronto', 'Utah',
-              'Washington']
+                  'Cleveland', 'Dallas', 'Denver', 'Detroit',
+                  'Golden State', 'Houston', 'Indiana', 'L.A. Clippers',
+                  'L.A. Lakers', 'Memphis', 'Miami', 'Milwaukee',
+                  'Minnesota', 'New Orleans', 'New York', 'Oklahoma City',
+                  'Orlando', 'Philadelphia', 'Phoenix', 'Portland',
+                  'Sacramento', 'San Antonio', 'Toronto', 'Utah',
+                  'Washington']
 
     if sel_browser is None:
         browser = webdriver.Chrome('chromedriver')
@@ -280,7 +282,7 @@ def scrape_betting_page(url, sel_browser = None, mongo_driver = None, game_date 
     time.sleep(5)
 
     # Stop the page from loading
-    browser.execute_script("window.stop()");
+    browser.execute_script("window.stop()")
 
     # Sportsbooks
     sb = browser.find_elements_by_id('bookName')
