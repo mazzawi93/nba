@@ -7,7 +7,7 @@ from db import datasets, mongo, process_utils
 from models import nba_models as nba
 from models import prediction_utils as pu
 
-from scrape import team_scraper
+from scrape import team_scraper, scrape_utils
 
 class nba_model:
 
@@ -27,9 +27,7 @@ class nba_model:
         self.day_span = day_span
 
         self.today = datetime.datetime.now()
-        self.today = self.today.replace(hour=0, minute=0, second=0, microsecond=0)
-
-        # TODO: Determine what days are missing from the DB!
+        self.today = pd.Timestamp(self.today.replace(hour=0, minute=0, second=0, microsecond=0))
 
         # Train new abilities if they don't exist in the database
         if self.mongo.count(self.mongo.DIXON_TEAM,
@@ -39,11 +37,31 @@ class nba_model:
                              'day_span': self.day_span}) == 0:
             print('Training All Weeks')
             self.train_all()
-        # TODO: THIS THING
-        #elif self.mongo.count(self.mongo.DIXON_TEAM, {'mw': self.mw, 'att_constraint': self.att_constraint, 'def_constraint': self.def_constraint, 'week': self.week}) == 0:
-        #    print('Training Current Week')
-            # TODO: Scrape game logs of last week
-        #    self.train_week()
+        # ELIF TRAIN MISSING DAYS
+        elif self.mongo.count(self.mongo.DIXON_TEAM,
+                              {
+                                'mw': self.mw,
+                                'att_constraint': self.att_constraint,
+                                'def_constraint': self.def_constraint,
+                                'date': self.today
+                              }) == 0:
+
+            print('Scraping Missing Games')
+            for team in scrape_utils.team_names():
+                team_scraper.season_game_logs(team, 2019)
+
+            print('Training Missing Days (Including Today)')
+            ab = datasets.team_abilities(mw, att_constraint, def_constraint, day_span)
+            games = datasets.game_results([2017, 2018, 2019])
+
+            missing_ab = ab.merge(games, on = 'date', how = 'right')
+
+            # Train for the missing dates
+            for date in missing_ab.loc[missing_ab.team.isnull(), 'date'].unique():
+                self.train(date)
+
+            # Need to add today as this won't include that
+            self.train(self.today)
 
         # Get all abilities in DF
         self.abilities = datasets.team_abilities(mw, att_constraint, def_constraint, day_span)
@@ -54,11 +72,10 @@ class nba_model:
 
         """
 
-        all_dates = datasets.game_results([2017, 2018, 2019])['date']
+        all_dates = datasets.game_results([2017, 2018, 2019])['date'].unique()
 
-        all_dates
         for date in all_dates:
-            self.train(date)
+            self.train(pd.Timestamp(date))
 
     def train(self, date = None, years_to_keep = 2):
 
