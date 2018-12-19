@@ -4,14 +4,13 @@ import pandas as pd
 import numpy as np
 from db import mongo
 
-def game_results(season=None, teams=None, week=None):
+def game_results(season=None, teams=None, date=None):
     """
     Creates a Pandas DataFrame that contains game results.
 
     Args:
         season: A list of season numbers
         teams: Team Names, if it's not None the DataFrame will contain indices
-        week: Week number
 
     Returns:
         A Pandas DataFrame containing a historical NBA results.
@@ -28,9 +27,9 @@ def game_results(season=None, teams=None, week=None):
             season = [season]
         season_match['season'] = {'$in': season}
 
-    week_match = {}
-    if week is not None:
-        week_match['week'] = {'$lt': week}
+    date_match = {}
+    if date is not None:
+        date_match['date'] = {'$lt': date}
 
     pipeline = [
         {'$match': season_match},
@@ -39,12 +38,10 @@ def game_results(season=None, teams=None, week=None):
             'away_team' : '$away.team',
             'home_pts': '$home.pts',
             'away_pts': '$away.pts',
-            'week': {'$add': [{'$week': '$date'},
-                              {'$multiply': [{'$mod': [{'$year': '$date'}, 2010]}, 52]}]},
             'season': 1,
             'date': 1
         }},
-        {'$match': week_match}
+        {'$match': date_match}
 
     ]
     # Could aggregate
@@ -114,7 +111,7 @@ def betting_df(season=None, sportsbooks=None):
     return pd.DataFrame(list(cursor))
 
 
-def team_abilities(decay, att_constraint, def_constraint):
+def team_abilities(decay, att_constraint, def_constraint, day_span):
     """
     Return abilities based on the time decay factor
 
@@ -130,7 +127,8 @@ def team_abilities(decay, att_constraint, def_constraint):
     query = {
         'mw': decay,
         'att_constraint': att_constraint,
-        'def_constraint': def_constraint
+        'def_constraint': def_constraint,
+        'day_span': day_span
     }
 
     projection = {
@@ -149,16 +147,16 @@ def team_abilities(decay, att_constraint, def_constraint):
     abilities_df = pd.DataFrame(list(cursor))
 
     attack = pd.DataFrame(abilities_df.att.values.tolist())
-    attack['week'] = abilities_df['week']
-    attack = attack.melt('week', var_name='team', value_name='attack')
+    attack['date'] = abilities_df['date']
+    attack = attack.melt('date', var_name='team', value_name='attack')
 
     defence = pd.DataFrame(abilities_df['def'].values.tolist())
-    defence['week'] = abilities_df['week']
-    defence = defence.melt('week', var_name='team', value_name='defence')
+    defence['date'] = abilities_df['date']
+    defence = defence.melt('date', var_name='team', value_name='defence')
 
     home_adv = pd.DataFrame(abilities_df['home_adv'].values.tolist())
-    home_adv['week'] = abilities_df['week']
-    home_adv = home_adv.melt('week', var_name='team', value_name='home_adv')
+    home_adv['date'] = abilities_df['date']
+    home_adv = home_adv.melt('date', var_name='team', value_name='home_adv')
 
     abilities_df = attack.merge(defence)
     abilities_df = abilities_df.merge(home_adv)

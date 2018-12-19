@@ -4,7 +4,7 @@ import numpy as np
 from scipy.stats import poisson
 
 
-def dixon_coles(params, games, nteams, week, decay):
+def dixon_coles(params, games, nteams, date, day_span, decay):
     """
     This is the likelihood function for the Dixon Coles model adapted for basketball.
 
@@ -27,6 +27,6 @@ def dixon_coles(params, games, nteams, week, decay):
             * params[games['home_team'] + nteams]
 
     likelihood = poisson.logpmf(games['home_pts'], hmean) + poisson.logpmf(games['away_pts'], amean)
-    weight = np.exp(-decay * (week - games['week']))
+    weight = np.exp(-decay * np.ceil(((date - games['date']).dt.days) / day_span))
 
     return -np.dot(likelihood, weight)

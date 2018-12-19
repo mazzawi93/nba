@@ -11,7 +11,7 @@ from scrape import team_scraper
 
 class nba_model:
 
-    def __init__(self, mw, att_constraint, def_constraint):
+    def __init__(self, mw, att_constraint, def_constraint, day_span = 7):
 
         # Team Information
         self.nteams = 30
@@ -24,22 +24,29 @@ class nba_model:
         self.mw = mw
         self.att_constraint = att_constraint
         self.def_constraint = def_constraint
+        self.day_span = day_span
 
-        # Set to the current week
         self.today = datetime.datetime.now()
-        self.week = int(self.today.strftime("%U")) +  (self.today.year % 2010 * 52)
+        self.today = self.today.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # TODO: Determine what days are missing from the DB!
 
         # Train new abilities if they don't exist in the database
-        if self.mongo.count(self.mongo.DIXON_TEAM, {'mw': self.mw, 'att_constraint': self.att_constraint, 'def_constraint': self.def_constraint}) == 0:
+        if self.mongo.count(self.mongo.DIXON_TEAM,
+                            {'mw': self.mw,
+                             'att_constraint': self.att_constraint,
+                             'def_constraint': self.def_constraint,
+                             'day_span': self.day_span}) == 0:
             print('Training All Weeks')
             self.train_all()
-        elif self.mongo.count(self.mongo.DIXON_TEAM, {'mw': self.mw, 'att_constraint': self.att_constraint, 'def_constraint': self.def_constraint, 'week': self.week}) == 0:
-            print('Training Current Week')
+        # TODO: THIS THING
+        #elif self.mongo.count(self.mongo.DIXON_TEAM, {'mw': self.mw, 'att_constraint': self.att_constraint, 'def_constraint': self.def_constraint, 'week': self.week}) == 0:
+        #    print('Training Current Week')
             # TODO: Scrape game logs of last week
-            self.train_week()
+        #    self.train_week()
 
         # Get all abilities in DF
-        self.abilities = datasets.team_abilities(mw, att_constraint, def_constraint)
+        self.abilities = datasets.team_abilities(mw, att_constraint, def_constraint, day_span)
 
     def train_all(self):
         """
@@ -47,48 +54,38 @@ class nba_model:
 
         """
 
-        weeks = datasets.game_results([2015, 2016, 2017, 2018, 2019])['week'].unique()
+        all_dates = datasets.game_results([2017, 2018, 2019])['date']
 
-        # Generate abilities for each week
-        # TODO: Don't do range as it does all weeks in the offseason
-        for w in weeks:
-            self.train_week(int(w))
+        all_dates
+        for date in all_dates:
+            self.train(date)
 
+    def train(self, date = None, years_to_keep = 2):
 
-    def train_week(self, week = None):
-        """ Train a specific week to get team abilities.
+        if date is None:
+            date = self.today
 
-        Args:
-
-        """
-
-        # If week is None, then use the current week
-        if week is None:
-            week = self.week
-
-        # Get all games in DB before given week
-        df = datasets.game_results(teams = self.teams, week = week)
-
-        # Only keep the last 52 weeks
-        #df = df[df.week >= (week-52)]
+        # Only keep the last two seasons
+        df = datasets.game_results(teams = self.teams, date = date)
+        df = df[((date - df['date']).dt.days) < (365*years_to_keep)]
 
         # Remove abilities from DB
-        self.mongo.remove(self.mongo.DIXON_TEAM, {'mw': self.mw, 'att_constraint': self.att_constraint, 'def_constraint': self.def_constraint, 'week': week})
+        self.mongo.remove(self.mongo.DIXON_TEAM,
+                          {
+                            'mw': self.mw,
+                            'att_constraint': self.att_constraint,
+                            'def_constraint': self.def_constraint,
+                            'day_period': self.day_span
+                          })
 
         # Initial Guess
         a0 = pu.initial_guess(0, self.nteams)
 
-        if self.att_constraint == 'rolling':
-            weight = np.exp(-self.mw * (week - df['week']))
-            att_constraint = np.average(np.append(df['home_pts'], df['away_pts']), weights = np.append(weight, weight))
-        else:
-            att_constraint = self.att_constraint
+        att_constraint = self.att_constraint
 
         con = []
 
-        print(week, att_constraint)
-
-        np.exp(-0.044 * np.arange(1, 100))
+        print(date, att_constraint)
 
         if self.att_constraint is not None:
             con.append({'type': 'eq', 'fun': pu.attack_constraint, 'args': (round(att_constraint), self.nteams,)})
@@ -97,17 +94,18 @@ class nba_model:
             con.append({'type': 'eq', 'fun': pu.defense_constraint, 'args': (round(self.def_constraint), self.nteams,)})
 
         # Get team parameters for the current week
-        opt = minimize(nba.dixon_coles, x0=a0, args=(df, self.nteams, week, self.mw), constraints = con, method='SLSQP')
+        opt = minimize(nba.dixon_coles, x0=a0, args=(df, self.nteams, date, self.day_span, self.mw), constraints = con, method='SLSQP')
 
         abilities = pu.convert_abilities(opt.x, self.teams)
 
         # Store weekly abilities
-        abilities['week'] = int(week)
+        abilities['day_span'] = self.day_span
         abilities['mw'] = self.mw
 
         # Constraints
         abilities['att_constraint'] = self.att_constraint
         abilities['def_constraint'] = self.def_constraint
+        abilities['date'] = date
 
         self.mongo.insert(self.mongo.DIXON_TEAM, abilities)
 
@@ -124,8 +122,8 @@ class nba_model:
             games = dataset
 
         # Merge the team abilities to the results
-        games = games.merge(self.abilities, left_on = ['week', 'home_team'], right_on = ['week', 'team']) \
-        .merge(self.abilities, left_on = ['week', 'away_team'], right_on = ['week', 'team'])
+        games = games.merge(self.abilities, left_on = ['date', 'home_team'], right_on = ['date', 'team']) \
+        .merge(self.abilities, left_on = ['date', 'away_team'], right_on = ['date', 'team'])
 
         # Rename the columns
         games = games.rename(columns = {'attack_x': 'home_attack',
