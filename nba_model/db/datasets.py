@@ -130,7 +130,8 @@ def team_abilities(decay, att_constraint, def_constraint):
     query = {
         'mw': decay,
         'att_constraint': att_constraint,
-        'def_constraint': def_constraint
+        'def_constraint': def_constraint,
+        'week': {'$exists': True}
     }
 
     projection = {
