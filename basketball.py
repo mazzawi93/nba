@@ -262,7 +262,7 @@ class nba_model:
         if sportsbooks is not None:
             today = today[today.sportsbook.isin(sportsbooks)]
 
-        today['week'] = self.week
+        today['date'] = self.today
 
         predictions = self.predict(today, keep_abilities = keep_abilities)
         bets = self.games_to_bet(predictions, return_bets_only = bets_only, R_percent = R_percent)
