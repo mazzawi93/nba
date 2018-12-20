@@ -98,7 +98,11 @@ class nba_model:
         # Initial Guess
         a0 = pu.initial_guess(0, self.nteams)
 
-        att_constraint = self.att_constraint
+        if self.att_constraint == 'rolling':
+            weight = np.exp(-self.mw * np.ceil(((date - df['date']).dt.days) / self.day_span))
+            att_constraint = np.average(df['away_pts'], weights = weight)
+        else:
+            att_constraint = self.att_constraint
 
         con = []
 
