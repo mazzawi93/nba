@@ -58,7 +58,7 @@ class nba_model:
 
             # Train for the missing dates
             for date in missing_ab.loc[missing_ab.team.isnull(), 'date'].unique():
-                self.train(date)
+                self.train(pd.Timestamp(date))
 
             # Need to add today as this won't include that
             self.train(self.today)
@@ -101,6 +101,10 @@ class nba_model:
         if self.att_constraint == 'rolling':
             weight = np.exp(-self.mw * np.ceil(((date - df['date']).dt.days) / self.day_span))
             att_constraint = np.average(df['away_pts'], weights = weight)
+        elif self.att_constraint == 'rolling_low':
+            weight = np.exp(-self.mw * np.ceil(((date - df['date']).dt.days) / self.day_span))
+            att_constraint = np.floor((np.average(df['away_pts'], weights = weight) + 100)/2)
+
         else:
             att_constraint = self.att_constraint
 
