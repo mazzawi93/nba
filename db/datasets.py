@@ -3,6 +3,7 @@
 import pandas as pd
 import numpy as np
 from db import mongo
+from scipy.stats import beta
 
 def game_results(season=None, teams=None, date=None):
     """
@@ -111,6 +112,31 @@ def betting_df(season=None, sportsbooks=None):
     return pd.DataFrame(list(cursor))
 
 
+def player_abilities(decay, day_span):
+
+    query = {
+        'mw': decay,
+        'day_span': day_span
+    }
+
+    projection = {
+        '_id': 0,
+        'mw': 0,
+        'day_span': 0,
+    }
+
+    mongo_wrapper = mongo.Mongo()
+    cursor = mongo_wrapper.find(mongo_wrapper.PLAYERS_BETA, query, projection)
+
+    abilities_df = pd.DataFrame(list(cursor))
+
+    df = pd.concat([abilities_df.drop(['player'], axis=1), abilities_df['player'].apply(pd.Series)], axis = 1)
+
+    df['mean'] = beta.mean(df.a, df.b)
+
+    return df
+
+
 def team_abilities(decay, att_constraint, def_constraint, day_span):
     """
     Return abilities based on the time decay factor
@@ -162,3 +188,65 @@ def team_abilities(decay, att_constraint, def_constraint, day_span):
     abilities_df = abilities_df.merge(home_adv)
 
     return abilities_df
+
+def player_results(season=None, date = None):
+
+    # MongoDB
+    m = mongo.Mongo()
+
+    season_match = {}
+
+    # Match the right season
+    if season is not None:
+        if isinstance(season, int):
+            season = [season]
+        season_match['season'] = {'$in': season}
+
+    date_match = {}
+    if date is not None:
+        date_match['date'] = {'$lt': date}
+
+    df = None
+
+    for i in [['$hplayers.player', '$hplayers.pts', '$home.team', '$home.pts'], ['$aplayers.player', '$aplayers.pts', '$away.team', '$away.pts']]:
+        pipeline = [
+            {'$match': season_match},
+            {'$match': date_match},
+            {'$project': {
+                'player': i[0],
+                'pts': i[1],
+                'team': i[2],
+                'team_pts': i[3],
+                'date': 1,
+                'season': 1
+            }},
+            {'$unwind': {
+                'path': '$player',
+                'includeArrayIndex': 'player_index'
+            }},
+            {'$unwind': {
+                'path': '$pts',
+                'includeArrayIndex': 'pts_index'
+            }},
+            {'$project': {
+                'date': 1,
+                'team': 1,
+                'season': 1,
+                'player': 1,
+                'pts': 1,
+                'team_pts': 1,
+                'compare': {
+                    '$cmp': ['$player_index', '$pts_index']
+                }
+            }},
+            {'$match': {'compare': 0}}
+        ]
+
+        games = m.aggregate('game_log', pipeline)
+
+        if df is None:
+            df = pd.DataFrame(list(games))
+        else:
+            df = pd.concat([df, pd.DataFrame(list(games))])
+
+    return df

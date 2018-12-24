@@ -7,8 +7,6 @@ from db import datasets, mongo, process_utils
 from models import nba_models as nba
 from models import prediction_utils as pu
 
-from scrape import team_scraper, scrape_utils
-
 class nba_model:
 
     def __init__(self, mw, att_constraint, def_constraint, day_span = 7):
@@ -66,16 +64,61 @@ class nba_model:
         # Get all abilities in DF
         self.abilities = datasets.team_abilities(mw, att_constraint, def_constraint, day_span)
 
-    def train_all(self):
+    def train_all(self, teams = True, players = True):
         """
         Train parameters for all weeks.
 
+        Args:
+            teams: Boolean - Train teams parameters if True
+            players: Boolean - Train player parameters if True
+
         """
 
-        all_dates = datasets.game_results([2017, 2018, 2019])['date'].unique()
+        # Train every date in dataset
+        for date in datasets.game_results([2017, 2018, 2019])['date'].unique():
 
-        for date in all_dates:
-            self.train(pd.Timestamp(date))
+            # Train Team Poisson Distributions
+            if teams:
+                self.train(pd.Timestamp(date))
+
+            # Train Player Beta Distributions
+            if players:
+                self.train_players(pd.Timestamp(date))
+
+    def train_players(self, date = None, years_to_keep = 2):
+
+        if date is None:
+            date = self.today
+
+        # Only keep the last two seasons
+        df = datasets.player_results(date = date)
+        df = df[((date - df['date']).dt.days) < (365*2)]
+
+        self.mongo.remove(
+            self.mongo.PLAYERS_BETA,
+            {
+                'mw': 0.044,
+                'day_span' : 7,
+                'date': date
+            }
+        )
+
+        print(date)
+
+        con = [{'type': 'ineq', 'fun': lambda x: x[0]}, {'type': 'ineq', 'fun': lambda x: x[1]}]
+
+        df.loc[df.pts == 0, 'pts'] = 0.001
+        for name, games in df.groupby('player'):
+
+            player = {'date': date, 'mw': 0.044, 'day_span': 7}
+
+            a0 = np.array([games.team_pts.mean(), (games.team_pts - games.pts).mean()])
+
+            opt = minimize(nba.player_beta, x0=a0, args=(games, date, self.day_span, self.mw), constraints = con)
+
+            player['player'] = {'name': str(name), 'a': opt.x[0], 'b': opt.x[1], 'team': games[games.date == games.date.max()]['team'].to_string(index = False)}
+
+            self.mongo.insert(self.mongo.PLAYERS_BETA, player)
 
     def train(self, date = None, years_to_keep = 2):
 
@@ -92,7 +135,8 @@ class nba_model:
                             'mw': self.mw,
                             'att_constraint': self.att_constraint,
                             'def_constraint': self.def_constraint,
-                            'day_period': self.day_span
+                            'day_period': self.day_span,
+                            'date': date
                           })
 
         # Initial Guess
