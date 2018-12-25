@@ -6,10 +6,11 @@ from scipy.optimize import minimize
 from db import datasets, mongo, process_utils
 from models import nba_models as nba
 from models import prediction_utils as pu
+from scrape import scrape_utils, team_scraper, player_scraper
 
 class nba_model:
 
-    def __init__(self, mw, att_constraint, def_constraint, day_span = 7):
+    def __init__(self, team_decay, player_decay, att_constraint, def_constraint, day_span = 7):
 
         # Team Information
         self.nteams = 30
@@ -33,20 +34,22 @@ class nba_model:
                              'att_constraint': self.att_constraint,
                              'def_constraint': self.def_constraint,
                              'day_span': self.day_span}) == 0:
-            print('Training All Weeks')
-            self.train_all()
+            print('Training Team Abilities')
+            self.train_all(teams = True, players = False)
         # ELIF TRAIN MISSING DAYS
         elif self.mongo.count(self.mongo.DIXON_TEAM,
                               {
                                 'mw': self.mw,
                                 'att_constraint': self.att_constraint,
                                 'def_constraint': self.def_constraint,
+                                'day_span': self.day_span,
                                 'date': self.today
                               }) == 0:
 
             print('Scraping Missing Games')
             for team in scrape_utils.team_names():
                 team_scraper.season_game_logs(team, 2019)
+
 
             print('Training Missing Days (Including Today)')
             ab = datasets.team_abilities(mw, att_constraint, def_constraint, day_span)
@@ -61,8 +64,36 @@ class nba_model:
             # Need to add today as this won't include that
             self.train(self.today)
 
+        # Train new abilities if they don't exist in the database
+        if self.mongo.count(self.mongo.PLAYERS_BETA, {'mw': self.mw, 'day_span': self.day_span}) == 0:
+            print('Training Player Abilities')
+            self.train_all(teams = Falses, players = True)
+        # ELIF TRAIN MISSING DAYS
+        elif self.mongo.count(self.mongo.PLAYERS_BETA, {'mw': self.mw, 'day_span': self.day_span, 'date': self.today}) == 0:
+
+            ab = datasets.player_abilities(mw, day_span)
+            games = datasets.game_results([2017, 2018, 2019])
+
+            # Determine which games need to be scraped
+            missing_ab = ab.merge(games, on = 'date', how = 'right')
+            #missing_ids = missing_ab[missing_ab['mean'].isnull()]['_id'].unique()
+
+            # Scrape the missing game logs
+            #print('Scraping Player Box Scpres')
+            #for id in missing_ids:
+            #    player_scraper.player_box_score(id)
+
+            # Train for the missing dates
+            print('Train Missing Days')
+            for date in missing_ab.loc[missing_ab.team.isnull(), 'date'].unique():
+                self.train_players(pd.Timestamp(date))
+
+            # Need to add today as this won't include that
+            self.train_players(self.today)
+
         # Get all abilities in DF
         self.abilities = datasets.team_abilities(mw, att_constraint, def_constraint, day_span)
+        #self.player_abilities = datasets.player_abilities(mw, day_span)
 
     def train_all(self, teams = True, players = True):
         """
@@ -179,7 +210,7 @@ class nba_model:
         self.mongo.insert(self.mongo.DIXON_TEAM, abilities)
 
 
-    def predict(self, dataset = None, seasons = None, keep_abilities = False, sample = False):
+    def predict(self, dataset = None, seasons = None, keep_abilities = False, players = False, player_penalty = 0.17, top_players = 1):
         """
         Game predictions based on the team.
         """
@@ -202,37 +233,52 @@ class nba_model:
                                         'home_adv_x': 'home_adv'}) \
                       .drop(['team_x', 'team_y', 'home_adv_y'], axis = 1)
 
-        # Compute the means
+                # Compute the means
         games['home_mean'] = games['home_attack'] * games['away_defence'] * games['home_adv']
         games['away_mean'] = games['away_attack'] * games['home_defence']
 
-        if sample:
+        if players:
 
-            games[['hprob', 'aprob']] = games.apply(pu.determine_probabilities_sample, axis = 1)
+            player_abilities = datasets.player_abilities(decay=0.044, day_span = 7)
 
-            scale = 1 / (games['hprob'] + games['aprob'])
+            player_abilities['rank'] = player_abilities.groupby(['team', 'date'])['mean'].rank(ascending = False)
 
-            games['hprob'] = games['hprob'] * scale
-            games['aprob'] = games['aprob'] * scale
+            player_abilities = player_abilities[player_abilities['rank'] <= top_players]
 
-        else:
+            # Get the players who played in a game, not just best player
+            pr = datasets.player_results().astype(str)
 
-            # Win probabilities
-            hprob = np.zeros(len(games))
-            aprob = np.zeros(len(games))
+            # Iterate through each game and apply penalty if best player is missing
+            for game in games.itertuples():
 
-            # Iterate through each game to determine the winner and prediction
-            for row in games.itertuples():
-                hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.home_mean, row.away_mean)
+                players = pr[pr._id==game._1]['player'].values
 
-            # Scale odds so they sum up to 1
-            scale = 1 / (hprob + aprob)
-            hprob = hprob * scale
-            aprob = aprob * scale
+                # Home Penalty
+                bp = player_abilities.loc[(player_abilities.team == game.home_team) & (player_abilities.date == game.date)]
+                penalty = 1 - (bp['mean'] * ~bp['name'].isin(players) * player_penalty)
+                games.loc[games._id == game._1, 'home_mean'] = penalty.cumprod().min() * games.loc[games._id == game._1, 'home_mean']
 
-            # Add probabilities to DF
-            games['hprob'] = hprob
-            games['aprob'] = aprob
+                # Away Penalty
+                bp = player_abilities.loc[(player_abilities.team == game.away_team) & (player_abilities.date == game.date)]
+                penalty = 1 - (bp['mean'] * ~bp['name'].isin(players) * player_penalty)
+                games.loc[games._id == game._1, 'away_mean'] = penalty.cumprod().min() * games.loc[games._id == game._1, 'away_mean']
+
+        # Win probabilities
+        hprob = np.zeros(len(games))
+        aprob = np.zeros(len(games))
+
+        # Iterate through each game to determine the winner and prediction
+        for row in games.itertuples():
+            hprob[row.Index], aprob[row.Index] = pu.determine_probabilities(row.home_mean, row.away_mean)
+
+        # Scale odds so they sum up to 1
+        scale = 1 / (hprob + aprob)
+        hprob = hprob * scale
+        aprob = aprob * scale
+
+        # Add probabilities to DF
+        games['hprob'] = hprob
+        games['aprob'] = aprob
 
         # Drop columns we don't want
         if not keep_abilities:
