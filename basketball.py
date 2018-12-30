@@ -10,7 +10,7 @@ from scrape import scrape_utils, team_scraper, player_scraper
 
 class nba_model:
 
-    def __init__(self, team_decay, player_decay, att_constraint, def_constraint, day_span = 7):
+    def __init__(self, mw, att_constraint, def_constraint, day_span = 7):
 
         # Team Information
         self.nteams = 30
@@ -67,7 +67,7 @@ class nba_model:
         # Train new abilities if they don't exist in the database
         if self.mongo.count(self.mongo.PLAYERS_BETA, {'mw': self.mw, 'day_span': self.day_span}) == 0:
             print('Training Player Abilities')
-            self.train_all(teams = Falses, players = True)
+            self.train_all(teams = False, players = True)
         # ELIF TRAIN MISSING DAYS
         elif self.mongo.count(self.mongo.PLAYERS_BETA, {'mw': self.mw, 'day_span': self.day_span, 'date': self.today}) == 0:
 
@@ -76,12 +76,12 @@ class nba_model:
 
             # Determine which games need to be scraped
             missing_ab = ab.merge(games, on = 'date', how = 'right')
-            #missing_ids = missing_ab[missing_ab['mean'].isnull()]['_id'].unique()
+            missing_ids = missing_ab[missing_ab['mean'].isnull()]['_id'].unique()
 
             # Scrape the missing game logs
-            #print('Scraping Player Box Scpres')
-            #for id in missing_ids:
-            #    player_scraper.player_box_score(id)
+            print('Scraping Player Box Scpres')
+            for id in missing_ids:
+                player_scraper.player_box_score(id)
 
             # Train for the missing dates
             print('Train Missing Days')
