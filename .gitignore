@@ -3,7 +3,7 @@ __pycache__/
 .DS_Store
 *.xlsx
 output/
-venv/
+venv*/
 run*
 to_*
 *.csv
