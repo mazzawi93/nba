@@ -2,6 +2,7 @@
 
 import numpy as np
 from scipy.stats import poisson
+from scipy.stats import beta
 
 
 def dixon_coles(params, games, nteams, date, day_span, decay):
@@ -27,6 +28,18 @@ def dixon_coles(params, games, nteams, date, day_span, decay):
             * params[games['home_team'] + nteams]
 
     likelihood = poisson.logpmf(games['home_pts'], hmean) + poisson.logpmf(games['away_pts'], amean)
+    weight = np.exp(-decay * np.ceil(((date - games['date']).dt.days) / day_span))
+
+    return -np.dot(likelihood, weight)
+
+
+def player_beta(params, games, date, day_span, decay):
+    """
+    Likelihood function to determine player beta distribution parameters
+    :return: Likelihood
+    """
+
+    likelihood = beta.logpdf(games['pts'] / games['team_pts'], params[0], params[1])
     weight = np.exp(-decay * np.ceil(((date - games['date']).dt.days) / day_span))
 
     return -np.dot(likelihood, weight)

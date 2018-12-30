@@ -8,6 +8,7 @@ class Mongo:
 
     DIXON_TEAM = 'dixon_team'
     GAME_LOG = 'game_log'
+    PLAYERS_BETA = 'player_beta'
 
     def __init__(self):
         self.client = MongoClient()
