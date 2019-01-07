@@ -373,7 +373,7 @@ class nba_model:
         bets = bets[['date', 'sportsbook', 'home_team', 'hprob', 'model_h_odds', 'home_R', 'home_odds', 'home_odds_needed', 'away_team', 'aprob', 'model_a_odds', 'away_R', 'away_odds', 'away_odds_needed']]
 
         if file_name is not None:
-            bets.to_csv('bets_jan7_away.csv', index=False)
+            bets.to_csv(file_name, index=False)
 
         return bets
 
