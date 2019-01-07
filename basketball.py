@@ -65,13 +65,13 @@ class nba_model:
             self.train(self.today)
 
         # Train new abilities if they don't exist in the database
-        if self.mongo.count(self.mongo.PLAYERS_BETA, {'mw': self.mw, 'day_span': self.day_span}) == 0:
+        if self.mongo.count(self.mongo.PLAYERS_BETA, {'mw': 0.044, 'day_span': self.day_span}) == 0:
             print('Training Player Abilities')
             self.train_all(teams = False, players = True)
         # ELIF TRAIN MISSING DAYS
-        elif self.mongo.count(self.mongo.PLAYERS_BETA, {'mw': self.mw, 'day_span': self.day_span, 'date': self.today}) == 0:
+        elif self.mongo.count(self.mongo.PLAYERS_BETA, {'mw': 0.044, 'day_span': self.day_span, 'date': self.today}) == 0:
 
-            ab = datasets.player_abilities(mw, day_span)
+            ab = datasets.player_abilities(0.044, day_span)
             games = datasets.game_results([2017, 2018, 2019])
 
             # Determine which games need to be scraped
@@ -93,7 +93,7 @@ class nba_model:
 
         # Get all abilities in DF
         self.abilities = datasets.team_abilities(mw, att_constraint, def_constraint, day_span)
-        #self.player_abilities = datasets.player_abilities(mw, day_span)
+        self.player_abilities = datasets.player_abilities(0.044, day_span)
 
     def train_all(self, teams = True, players = True):
         """
@@ -210,7 +210,7 @@ class nba_model:
         self.mongo.insert(self.mongo.DIXON_TEAM, abilities)
 
 
-    def predict(self, dataset = None, seasons = None, keep_abilities = False, players = False, player_penalty = 0.17, top_players = 1):
+    def predict(self, dataset = None, seasons = None, keep_abilities = False, players = False, player_penalty = 0.22, top_players = 1):
         """
         Game predictions based on the team.
         """
@@ -364,6 +364,16 @@ class nba_model:
 
         predictions = self.predict(today, keep_abilities = keep_abilities)
         bets = self.games_to_bet(predictions, return_bets_only = bets_only, R_percent = R_percent)
+
+        bets = bets.sort_values(['home_team', 'sportsbook'])
+
+        bets['home_odds_needed'] = round(1.5*bets['model_h_odds'], 2)
+        bets['away_odds_needed'] = round(1.5*bets['model_a_odds'], 2)
+
+        bets = bets[['date', 'sportsbook', 'home_team', 'hprob', 'model_h_odds', 'home_R', 'home_odds', 'home_odds_needed', 'away_team', 'aprob', 'model_a_odds', 'away_R', 'away_odds', 'away_odds_needed']]
+
+        if file_name is not None:
+            bets.to_csv('bets_jan7_away.csv', index=False)
 
         return bets
 
