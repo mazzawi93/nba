@@ -306,10 +306,6 @@ class nba_model:
             games_df['home_R'] = games_df['home_odds']/games_df['model_h_odds']
             games_df['away_R'] = games_df['away_odds']/games_df['model_a_odds']
 
-        # floor to two decimal places
-        games_df['home_R'] = np.floor(games_df['home_R'] * 100) / 100
-        games_df['away_R'] = np.floor(games_df['away_R'] * 100) / 100
-
         if kwargs.get('return_bets_only', False):
             return games_df[(((games_df.home_R >= low_R) & (games_df.home_R <= high_R)) | ((games_df.away_R >= low_R) & (games_df.away_R < high_R)))]
         else:
@@ -317,6 +313,7 @@ class nba_model:
 
 
     def today_games(self,
+                    file_name = None,
                     sportsbooks = ['Pinnacle Sports', 'bet365', 'SportsInteraction'],
                     bets_only = True,
                     keep_abilities = False,
@@ -392,7 +389,7 @@ class nba_model:
         return df
 
 
-    def betting_ranges(self, predictions, **kwargs):
+    def betting_ranges(self, predictions, home=True, **kwargs):
 
 
         # Get R values for predictions
@@ -407,28 +404,86 @@ class nba_model:
         low_r = kwargs.get('low_r', 1)
         high_r = kwargs.get('high_r', 3)
 
-        r = np.arange(low_r, 2.15, 0.05)
+        # Betting Strategy
+        fluc_allowance = kwargs.get('fluc_allowance', 1.5)
+        risk_tolerance = kwargs.get('risk_tolerance', 10)
+        starting_bankroll = kwargs.get('starting_bankroll', 2000)
+
 
         # Seasons to bet
         years = kwargs.get('years', [[2019], [2018, 2019], [2017, 2018, 2019]])
 
+        to_file = kwargs.get('to_file', False)
 
         # Create sheet for each year
         for n in years:
 
             games = betting[betting.season.isin(n)]
 
-            df = pd.DataFrame()
+            lr_list = []
+            hr_list = []
 
-            # Simulate the bets for each range
-            for lr in r:
-                for hr in np.arange(lr+0.05, high_r+0.05, 0.05):
+            for lr in np.arange(low_r, high_r+0.01, 0.01):
+                for hr in np.arange(lr+0.01, high_r+0.01, 0.01):
+                    lr_list.append(round(lr, 2))
+                    hr_list.append(round(hr, 2))
 
-                    season_df = pd.DataFrame(pu.bet_season(games, lr, hr, **kwargs))
-                    df = df.append(season_df, ignore_index = True)
+            df = pd.DataFrame({'low_r': lr_list,
+                'high_r': hr_list,
+                'bankroll': starting_bankroll,
+                'bet_total': 0,
+                'bet_count': 0,
+                'bet_revenue': 0})
 
-                # Write the season to excel
-                df.to_excel(writer, '-'.join(str(e) for e in n), index = False)
+            # Get the max odds per game
+            if home:
+                games = games.loc[games.groupby('_id')['home_R'].idxmax()].reset_index(drop=True)
+            else:
+                games = games.loc[games.groupby('_id')['away_R'].idxmax()].reset_index(drop=True)
+
+            for index, game in games.iterrows():
+
+                if home:
+                    bet = (game.home_R < df.high_r) & (game.home_R > df.low_r)
+                    odds = game.home_odds
+                else:
+                    bet = (game.away_R < df.high_r) & (game.away_R > df.low_r)
+                    odds = game.away_odds
+
+                # Set the bet amount for the game
+                df['bet_amount'] = 0
+                df.loc[bet, 'bet_amount'] = round(1/(odds * fluc_allowance * risk_tolerance) * df['bankroll'], 2)
+
+                # Adjust bankroll
+                df['bankroll'] = df['bankroll'] - df['bet_amount']
+
+                # Betting stats
+                df.loc[bet, 'bet_total'] += df['bet_amount']
+                df.loc[bet, 'bet_count'] += 1
+
+                if home:
+                    if(game.home_pts > game.away_pts):
+                        df.loc[bet, 'bankroll'] = df['bankroll'] + round((df['bet_amount'] * odds), 2)
+                        df.loc[bet, 'bet_revenue'] += round((df['bet_amount'] * odds), 2)
+                else:
+                    if(game.away_pts > game.home_pts):
+                        df.loc[bet, 'bankroll'] = df['bankroll'] + round((df['bet_amount'] * odds), 2)
+                        df.loc[bet, 'bet_revenue'] += round((df['bet_amount'] * odds), 2)
+
+            df['profit'] = df['bet_revenue'] - df['bet_total']
+
+            try:
+                df['rob'] = ((df['bet_revenue'] - df['bet_total'])/df['bet_total'] * 100)
+            except ZeroDivisionError:
+                df['rob'] = 0
+
+            df = df.drop('bet_amount', axis=1)
+
+            # Write the season to excel
+            df.to_excel(writer, '-'.join(str(e) for e in n), index = False)
 
         # Save the excel file
-        writer.save()
+        if to_file:
+            writer.save()
+
+        return df
