@@ -64,6 +64,33 @@ class nba_model:
             # Need to add today as this won't include that
             self.train(self.today)
 
+        # Train new abilities if they don't exist in the database
+        if self.mongo.count(self.mongo.PLAYERS_BETA, {'mw': 0.044, 'day_span': self.day_span}) == 0:
+            print('Training Player Abilities')
+            self.train_all(teams = False, players = True)
+        # ELIF TRAIN MISSING DAYS
+        elif self.mongo.count(self.mongo.PLAYERS_BETA, {'mw': 0.044, 'day_span': self.day_span, 'date': self.today}) == 0:
+
+            ab = datasets.player_abilities(0.044, day_span)
+            games = datasets.game_results([2017, 2018, 2019])
+
+            # Determine which games need to be scraped
+            missing_ab = ab.merge(games, on = 'date', how = 'right')
+            missing_ids = missing_ab[missing_ab['mean'].isnull()]['_id'].unique()
+
+            # Scrape the missing game logs
+            print('Scraping Player Box Scpres')
+            for id in missing_ids:
+                player_scraper.player_box_score(id)
+
+            # Train for the missing dates
+            print('Train Missing Days')
+            for date in missing_ab.loc[missing_ab.team.isnull(), 'date'].unique():
+                self.train_players(pd.Timestamp(date))
+
+            # Need to add today as this won't include that
+            self.train_players(self.today)
+
         # Get all abilities in DF
         self.abilities = datasets.team_abilities(mw, att_constraint, def_constraint, day_span)
 
@@ -211,7 +238,7 @@ class nba_model:
 
         if players:
 
-            player_abilities = datasets.player_abilities(decay=0.044, day_span = 7)
+            player_abilities = datasets.player_abilities(decay=0.044, day_span = 7, gt_date=games.date.min())
 
             player_abilities['rank'] = player_abilities.groupby(['team', 'date'])['mean'].rank(ascending = False)
 

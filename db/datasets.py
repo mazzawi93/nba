@@ -112,12 +112,15 @@ def betting_df(season=None, sportsbooks=None):
     return pd.DataFrame(list(cursor))
 
 
-def player_abilities(decay, day_span):
+def player_abilities(decay, day_span, gt_date=None):
 
     query = {
         'mw': decay,
         'day_span': day_span
     }
+
+    if gt_date is not None:
+        query['date'] = {'$gte': gt_date}
 
     projection = {
         '_id': 0,
