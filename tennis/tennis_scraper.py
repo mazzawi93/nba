@@ -237,5 +237,36 @@ def scrape_betting_page(game_date):
 
     return df
 
+def get_todays_matches(url):
+    soup = bs_request(url)
+
+    # Get the match dates
+    date = datetime.datetime.strptime(soup.find('h3', {'class': 'day-table-date'}).text, '%A, %B %d, %Y')
+
+    # Each court has its own table
+    all_matches = soup.find_all('table', {'class': 'day-table'})
+    all_matches_list = []
+
+    for court in all_matches:
+        for match in court.find('tbody').find_all('tr'):
+            try:
+                # If it's None it is Women's tennis don't need that for now
+                if match.find('a', {'class': 'button-border'}) != None:
+                    players = match.find_all('td', {'class': 'day-table-name'})
+                    bruh = {
+                        'round': match.find('td', {'class': 'day-table-round'}).text.lstrip().rstrip(),
+                        'player_1': players[0].text.lstrip().rstrip(),
+                        'player_2': players[1].text.lstrip().rstrip()
+                    }
+                    all_matches_list.append(bruh)
+            except:
+                pass
+
+    df = pd.DataFrame(all_matches_list)
+    df['date'] = date
+
+    return date
+
+get_todays_matches('https://www.atptour.com/en/scores/current/indian-wells/404/daily-schedule')
 # TODO: get the list of tournement sTandings from player urls: https://www.atptour.com/en/players/rafael-nadal/n409/rankings-history
 # TODO: get odds
