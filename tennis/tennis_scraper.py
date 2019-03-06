@@ -3,6 +3,7 @@ import numpy as np
 from bs4 import BeautifulSoup
 import requests
 import datetime
+from selenium import webdriver
 
 
 def bs_request(url):
@@ -140,18 +141,18 @@ def get_match_stats(match_url):
 
 # examples
 
-year = 2019
+#year = 2019
 # get the tourneys for the year
-df = scrape_year(year)
+#df = scrape_year(year)
 # get one tournament result
-test_url = df.url[0]
-tourn = scrape_tournament(df.url[1])
+#test_url = df.url[0]
+#tourn = scrape_tournament(df.url[1])
 # get one match result
-get_match_stats(tourn.match_url[1])
+#get_match_stats(tourn.match_url[1])
 
-def player_ranking():
+def player_ranking(url):
 
-    url = 'https://www.atptour.com/en/players/rafael-nadal/n409/rankings-history'
+    #url = 'https://www.atptour.com/en/players/rafael-nadal/n409/rankings-history'
     soup = bs_request(url)
 
     rankings = soup.find('table', {'class': 'mega-table'}).find('tbody')
@@ -169,6 +170,72 @@ def player_ranking():
 
     return pd.DataFrame(all_weeks)
 
+
+def scrape_betting_page(game_date):
+
+    browser = webdriver.Chrome('chromedriver')
+
+    url = 'https://classic.sportsbookreview.com/betting-odds/tennis/?date=' + datetime.datetime.strftime(game_date, '%Y%m%d')
+    browser.get(url)
+
+    # Sportsbooks
+    sb = browser.find_elements_by_id('bookName')
+    sportsbooks = ['Opening']
+
+    # Create list of sportsbooks
+    for sportbook in sb:
+        if len(sportbook.text) > 1:
+            sportsbooks.append(sportbook.text)
+
+    # Get team names and odds
+    games = browser.find_elements_by_class_name('eventLine')
+
+    df = pd.DataFrame()
+
+    for game in games:
+
+        team_elements = game.find_elements_by_tag_name('a')
+
+        # Get Player names
+        player_1 = team_elements[0].text
+        player_2 = team_elements[1].text
+
+        odds_elements = game.find_elements_by_class_name('eventLine-book-value')
+
+        # Odds for each player by sportsbooks
+        player_1_odds = []
+        player_2_odds = []
+        i = 0
+
+        for game_odds in odds_elements:
+            if i > 0:
+                if i % 2 != 0:
+                    player_1_odds.append(game_odds.text)
+                else:
+                    player_2_odds.append(game_odds.text)
+            i += 1
+
+        # Scrapes rows with no data so don't insert those
+        if len(player_1_odds) > 0:
+            player_df = pd.DataFrame({'player_1': player_1, 'player_2': player_2, 'sportsbook': sportsbooks, 'odds_1': player_1_odds, 'odds_2': player_2_odds})
+            player_df = player_df[(player_df.odds_1 != '') & (player_df.odds_2 != '')]
+            df = df.append(player_df, ignore_index=True)
+
+    # Convert to decimal odds
+    df['odds_1'] = pd.to_numeric(df['odds_1'])
+    df['odds_1'] = np.where(df['odds_1'] >= 0, round(df.odds_1/100 + 1, 2), round(100/abs(df.odds_1)+1, 2))
+
+    df['odds_2'] = pd.to_numeric(df['odds_2'])
+    df['odds_2'] = np.where(df['odds_2'] >= 0, round(df.odds_2/100 + 1, 2), round(100/abs(df.odds_2)+1, 2))
+
+    # Tennis is played all over the world so timezones might fuck us up
+    if game_date is None:
+        game_date = datetime.date.today()
+    df['date'] = game_date
+
+    browser.close()
+
+    return df
 
 # TODO: get the list of tournement sTandings from player urls: https://www.atptour.com/en/players/rafael-nadal/n409/rankings-history
 # TODO: get odds
