@@ -64,33 +64,6 @@ class nba_model:
             # Need to add today as this won't include that
             self.train(self.today)
 
-        # Train new abilities if they don't exist in the database
-        if self.mongo.count(self.mongo.PLAYERS_BETA, {'mw': 0.044, 'day_span': self.day_span}) == 0:
-            print('Training Player Abilities')
-            self.train_all(teams = False, players = True)
-        # ELIF TRAIN MISSING DAYS
-        elif self.mongo.count(self.mongo.PLAYERS_BETA, {'mw': 0.044, 'day_span': self.day_span, 'date': self.today}) == 0:
-
-            ab = datasets.player_abilities(0.044, day_span)
-            games = datasets.game_results([2017, 2018, 2019])
-
-            # Determine which games need to be scraped
-            missing_ab = ab.merge(games, on = 'date', how = 'right')
-            missing_ids = missing_ab[missing_ab['mean'].isnull()]['_id'].unique()
-
-            # Scrape the missing game logs
-            print('Scraping Player Box Scpres')
-            for id in missing_ids:
-                player_scraper.player_box_score(id)
-
-            # Train for the missing dates
-            print('Train Missing Days')
-            for date in missing_ab.loc[missing_ab.team.isnull(), 'date'].unique():
-                self.train_players(pd.Timestamp(date))
-
-            # Need to add today as this won't include that
-            self.train_players(self.today)
-
         # Get all abilities in DF
         self.abilities = datasets.team_abilities(mw, att_constraint, def_constraint, day_span)
 
@@ -363,8 +336,8 @@ class nba_model:
 
         bets = bets.sort_values(['home_team', 'sportsbook'])
 
-        bets['home_odds_needed'] = round(1.5*bets['model_h_odds'], 2)
-        bets['away_odds_needed'] = round(1.5*bets['model_a_odds'], 2)
+        bets['home_odds_needed'] = round(1.16*bets['model_h_odds'], 2)
+        bets['away_odds_needed'] = round(1.16*bets['model_a_odds'], 2)
 
         bets = bets[['date', 'sportsbook', 'home_team', 'hprob', 'model_h_odds', 'home_R', 'home_odds', 'home_odds_needed', 'away_team', 'aprob', 'model_a_odds', 'away_R', 'away_odds', 'away_odds_needed']]
 
@@ -415,8 +388,19 @@ class nba_model:
 
         return df
 
+    def simlate_season(self, bets, low_home_r, high_home_r, low_away_r, high_away_r):
 
-    def betting_ranges(self, predictions, home=True, **kwargs):
+        # Get the home games and remove the R's that don't match
+        home_games = bets.loc[bets.groupby('_id')['home_R'].idxmax()][['_id', 'date' 'home_R', 'hprob', 'hodds']]
+        home_games = home_games.rename(columns={'home_R': 'R', 'hprob': 'prob', 'hodds': 'odds'})
+        home_games = home_games.loc[(home_games.R > low_home_r) & (home_games.R < high_home_r)]
+
+        # Get the away games and remove the R's thatt don't match
+        away_games = games.loc[bets.groupby('_id')['away_R'].idxmax()][['_id', 'date', 'away_R', 'aprob', 'aodds']]
+        away_games = away_games.rename(columns={'away_R': 'R', 'aprob': 'prob', 'aodds': 'odds'})
+        away_games = away_games.loc[(away_games.R > low_away_r) & (away_games.R < high_away_r)]
+
+    def betting_ranges(self, predictions, home=True, kelly=None, **kwargs):
 
 
         # Get R values for predictions
@@ -473,13 +457,20 @@ class nba_model:
                 if home:
                     bet = (game.home_R < df.high_r) & (game.home_R > df.low_r)
                     odds = game.home_odds
+                    prob = game.hprob
                 else:
                     bet = (game.away_R < df.high_r) & (game.away_R > df.low_r)
                     odds = game.away_odds
+                    prob = game.aprob
 
                 # Set the bet amount for the game
                 df['bet_amount'] = 0
-                df.loc[bet, 'bet_amount'] = round(1/(odds * fluc_allowance * risk_tolerance) * df['bankroll'], 2)
+
+                if kelly is not None:
+                #[(Winning Probability x(decimal odds-1) ) — Losing Probability] : (odds-1).
+                    df.loc[bet, 'bet_amount'] = round((((prob * (odds - 1)) - (1-prob))/(odds - 1)) / kelly * df['bankroll'], 2)
+                else:
+                    df.loc[bet, 'bet_amount'] = round(1/(odds * fluc_allowance * risk_tolerance) * df['bankroll'], 2)
 
                 # Adjust bankroll
                 df['bankroll'] = df['bankroll'] - df['bet_amount']
