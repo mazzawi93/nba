@@ -267,6 +267,29 @@ def get_todays_matches(url):
 
     return date
 
-get_todays_matches('https://www.atptour.com/en/scores/current/indian-wells/404/daily-schedule')
+# TODO: Run it with 2 tournaments running at the same time
+def get_current_tournament_results(url):
+    soup = bs_request(url)
+    all_matches = soup.find('table', {'class': 'day-table'})
+    rounds = all_matches.find_all('thead')
+    matches = all_matches.find_all('tbody')
+    stats_list = []
+    for i in range(len(rounds)):
+        round = rounds[i].find('th').text
+        for match in matches[i].find_all('tr'):
+            # If it's a womens match or a walk over there won't be a URL
+            try:
+                match_url = match.find('td', {'class': 'day-table-score'}).find('a', href=True)
+                print(match_url['href'])
+                match_stats = get_match_stats(match_url['href'])[0]
+                match_stats['round'] = round
+                stats_list.append(match_stats)
+            except TypeError:
+                pass
+    return pd.DataFrame(stats_list)
+
+get_current_tournament_results('https://www.atptour.com/en/scores/current/indian-wells/404/results')
+
+#get_todays_matches('https://www.atptour.com/en/scores/current/indian-wells/404/daily-schedule')
 # TODO: get the list of tournement sTandings from player urls: https://www.atptour.com/en/players/rafael-nadal/n409/rankings-history
 # TODO: get odds
